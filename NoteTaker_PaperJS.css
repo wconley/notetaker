@@ -1,0 +1,49 @@
+#notetaker {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+#notetaker_toolbar {
+    flex: 0 0 auto; /* Same as flex: none */
+    height: 2em;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    background-color: lightgray; 
+}
+
+#notetaker_canvas {
+    flex: 1 1 auto; /* Same as flex: auto */
+}
+
+#notetaker_toolbar_start, #notetaker_toolbar_middle, #notetaker_toolbar_end {
+    flex: 0 0 auto; /* Same as flex: none */
+    height: 2em;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.notetaker-toolbar-item {
+    flex: 0 0 auto; /* Same as flex: none */
+    font-size: 100%;
+    width: 2em;
+    height: 2em;
+    border: none;
+    /*border: 2px solid dimgray;*/
+    /*border-radius: 20% 0;*/
+    margin: 0 0.1em;
+    padding: 0;
+}
+.notetaker-toolbar-item:focus {
+    outline: none;
+}
+.notetaker-toolbar-item.selected {
+    border: 1px solid red;
+}
+
