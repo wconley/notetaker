@@ -1,0 +1,68 @@
+/* The top-level NoteTaker element. Typically a div, with exactly two children: 
+ * the notetaker_toolbar div (the whole toolbar) and 
+ * the notetaker_canvas canvas (the drawing area) */
+#notetaker {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* This is the div (typically, although it could be something else, like a form) 
+ * that contains the whole toolbar. It should have two or three (in theory, 
+ * possibly more) children, which are the divs for the start, middle, and end 
+ * sets of toolbar buttons (with IDs notetaker_toolbar_[start|middle|end]). */
+#notetaker_toolbar {
+    flex: 0 0 auto; /* Same as flex: none */
+    height: 2em;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    background-color: lightgray; 
+}
+
+/* This should be a canvas element, which is the whole drawing area. Note that 
+ * if we later allow multiple drawing areas (e.g. a separate one on each slide 
+ * of a Reveal.js slideshow) then we'll have to either re-use this same canvas 
+ * element on each slide, or make this a class instead of an ID. */
+#notetaker_canvas {
+    flex: 1 1 auto; /* Same as flex: auto */
+}
+
+/* These three divs allow us to split up the tools in the toolbar into three 
+ * (conceivably more) subsets that will be grouped together. We don't call them 
+ * left, middle, and right, because if the toolbar is vertical, they would be at 
+ * the top, middle, and bottom of the page. So, generically, they are start, 
+ * middle, and end. Start means left or top, end means right or bottom. */
+#notetaker_toolbar_start, #notetaker_toolbar_middle, #notetaker_toolbar_end {
+    flex: 0 0 auto; /* Same as flex: none */
+    height: 2em;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+/* This class is to be applied to any toolbar button (or other toolbar item). 
+ * Thus, most elements with this class will be <button> elements, but for 
+ * sliders and such, this may be applied to a div or something else. */
+#notetaker_toolbar button {
+    flex: 0 0 auto; /* Same as flex: none */
+    font-size: 100%;
+    width: 2em;
+    height: 2em;
+    border: none;
+    /*border: 2px solid dimgray;*/
+    /*border-radius: 20% 0;*/
+    margin: 0 0.1em;
+    padding: 0;
+}
+#notetaker_toolbar button:focus {
+    outline: none;
+}
+#notetaker_toolbar button.selected {
+    border: 1px solid red;
+}
+
