@@ -58,11 +58,21 @@
     /*border-radius: 20% 0;*/
     margin: 0 0.1em;
     padding: 0;
+    /*background-color: white;*/
 }
+#notetaker_toolbar button:disabled {
+    filter: grayscale(100%);
+}
+/*#notetaker_toolbar button:disabled:hover {*/
+    /*background-color: white;*/
+/*}*/
 #notetaker_toolbar button:focus {
-    outline: none;
+    outline-offset: 0px;
 }
 #notetaker_toolbar button.selected {
     border: 1px solid red;
+}
+#notetaker_toolbar button:disabled.selected {
+    border: none;
 }
 
