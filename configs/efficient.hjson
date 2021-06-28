@@ -1,0 +1,29 @@
+{
+  theme: "default", 
+  position: "top", 
+  start: [
+    { type: "dash-pattern-button*", value: "[]"     }, 
+    { type: "dash-pattern-button",  value: "[7, 3]" }, 
+    { type: "color-button*", value: "darkblue"      }, 
+    { type: "color-button",  value: "darkgreen"     }, 
+    { type: "color-button",  value: "darkred"       }, 
+    { type: "color-button",  value: "#404040"       }, 
+    { type: "color-button",  value: "darkorange"    }, 
+    { type: "color-button",  value: "purple"        }, 
+    { type: "color-button",  value: "blueviolet"    }, 
+  ], 
+  middle: [
+    { type: "pen-tool",       color: "*", width: 2, opacity: 1, dash: "[]*" }, 
+    { type: "line-tool",      color: "*", width: 2, opacity: 1, dash: "[]*" }, 
+    { type: "rectangle-tool", color: "*", width: 2, opacity: 1, dash: "[]*" }, 
+    { type: "ellipse-tool",   color: "*", width: 2, opacity: 1, dash: "[]*" }, 
+    { type: "pen-tool",       color: "lightgreen*", width: 16, opacity: 0.4, dash: "[]" }, 
+    { type: "delete-tool",    width: 3 }, 
+    { type: "erase-tool",     width: 10 }, 
+  ], 
+  end: [
+    { type: "undo" }, 
+    { type: "redo" }, 
+    { type: "trailing-laser-tool*", color: "red*", width: 10, opacity: 0.6 }, 
+  ], 
+}

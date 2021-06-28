@@ -143,7 +143,25 @@ document.addEventListener("DOMContentLoaded", function() {
         "REMEMBER_NOINIT",  // "&"      - Tool remembers its previous setting when selected. First time, it uses widgets. 
     ]);
 
-    // An abstract base class for the objects that control (most) tools
+    // The pass-through tool: Disable all interaction with the notetaker canvas
+    class PassthroughTool {
+        constructor(button, canvas) {
+            this.canvas = canvas; // Later, if we make Notetaker a Web Component, this will be passed in differently
+        }
+
+        activate() {
+            for (var propertyGroup of Object.values(properties)) {
+                propertyGroup.disabled = true;
+            }
+            this.canvas.style.pointerEvents = "none";
+        }
+
+        deactivate() {
+            this.canvas.style.pointerEvents = "auto";
+        }
+    }
+
+    // An abstract base class for the objects that control all other tools
     class NotetakerTool {
         constructor(button, defaults) {
             var property, rule, ruleType, ruleValue;
@@ -187,40 +205,43 @@ document.addEventListener("DOMContentLoaded", function() {
 
         activate() {
             for (var [property, rule] of Object.entries(this.rules)) {
+                let propertyGroup = properties[property];
                 switch (rule.ruleType) {
                     case PROPERTYRULES.VARIABLE:
                         // Always get value from currently selected widget
-                        properties[property].disabled = false;
-                        this[property] = properties[property].value;
+                        propertyGroup.disabled = false;
+                        this[property] = propertyGroup.value;
                         break;
                     case PROPERTYRULES.DEFAULT:
                         // Use the ruleValue, but allow it to be changed. 
-                        properties[property].disabled = false;
+                        propertyGroup.disabled = false;
                         this[property] = rule.ruleValue;
-                        properties[property].selectValue(this[property]);
+                        propertyGroup.selectValue(this[property]);
                         break;
                     case PROPERTYRULES.REMEMBER_NOINIT:
                         // Keep value as it is... unless null (first activation)
-                        properties[property].disabled = false;
+                        propertyGroup.disabled = false;
                         if (this[property] === null) {
-                            this[property] = properties[property].value;
+                            this[property] = propertyGroup.value;
+                            this.button.style.setProperty(`--${property}`, 
+                                    propertyGroup.cssConverter(this[property]));
                         }
                         else {
-                            properties[property].selectValue(this[property]);
+                            propertyGroup.selectValue(this[property]);
                         }
                         break;
                     case PROPERTYRULES.REMEMBER_INIT:
                         // Keep value as it is... unless null (first activation)
-                        properties[property].disabled = false;
+                        propertyGroup.disabled = false;
                         if (this[property] === null) {
                             this[property] = rule.ruleValue;
                         }
-                        properties[property].selectValue(this[property]);
+                        propertyGroup.selectValue(this[property]);
                         break;
                     case PROPERTYRULES.FIXED:
                         // Use the ruleValue, and disable changes. 
                         this[property] = rule.ruleValue;
-                        properties[property].disabled = true;
+                        propertyGroup.disabled = true;
                         break;
                 }
                 if (this[property] === null) {
@@ -681,17 +702,21 @@ document.addEventListener("DOMContentLoaded", function() {
             if (!this._selected) {
                 return null;
             }
+            if (!this._selected.classList.contains("selected")) {
+                this._selected.classList.add("selected")
+            }
             return this._selected._value;
         }
 
-        selectValue(value) { // Currently borked
+        selectValue(value) {
             value = attributeEncode(value);
             for (var widget of this.widgets) {
                 if (attributeEncode(widget._value) === value) {
                     this.select(widget);
-                    break;
+                    return;
                 }
             }
+            this._selected.classList.remove("selected");
         }
 
         set disabled(disabled) {
@@ -703,46 +728,76 @@ document.addEventListener("DOMContentLoaded", function() {
 
 
     // Initialize the toolbar config. In production, will be imported/fetched. 
+    //const configuration = {
+    //    "theme": "default", // NOT YET IMPLEMENTED
+    //    "position": "top", // NOT YET IMPLEMENTED
+    //    "start": [
+    //        { "type": "width-button", "value": 1 }, 
+    //        { "type": "width-button*", "value": 2 }, 
+    //        { "type": "width-button", "value": 10 }, 
+    //        { "type": "opacity-button*", "value": 1 }, 
+    //        { "type": "opacity-button", "value": 0.7 }, 
+    //        { "type": "opacity-button", "value": 0.4 }, 
+    //        { "type": "dash-pattern-button*", "value": [] }, 
+    //        { "type": "dash-pattern-button", "value": [7, 3] }, 
+    //        { "type": "dash-pattern-button", "value": [7, 3, 1, 3] }, 
+    //        { "type": "color-button", "value": "dodgerblue" }, 
+    //        { "type": "color-button", "value": "darkred" }, 
+    //        { "type": "color-button", "value": "darkgreen" }, 
+    //        { "type": "color-button", "value": "darkgray" }, 
+    //        { "type": "color-button", "value": "darkorange" }, 
+    //        { "type": "color-button", "value": "purple" }, 
+    //        { "type": "color-button", "value": "cornflowerblue" }, 
+    //    ], 
+    //    "middle": [
+    //        { "type": "pen-tool", "color": "darkblue", "width": 3, "opacity": 1, "dash": [] }, 
+    //        { "type": "pen-tool", "color": "darkblue*", "width": "3*", "opacity": "1*", "dash": "[]*" }, 
+    //        { "type": "pen-tool", "color": "darkblue&", "width": "3&", "opacity": "1&", "dash": "[]&" }, 
+    //        { "type": "pen-tool", "color": "&", "width": "&", "opacity": "&", "dash": "&" }, 
+    //        { "type": "pen-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
+    //        { "type": "line-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
+    //        { "type": "rectangle-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
+    //        { "type": "ellipse-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
+    //        { "type": "delete-tool", "width": "*" }, 
+    //        { "type": "erase-tool", "width": "*" }, 
+    //        { "type": "pen-tool", "color": "lightgreen", "width": 16, "opacity": 0.4, "dash": [] }, 
+    //    ], 
+    //    "end": [
+    //        { "type": "undo" }, 
+    //        { "type": "redo" }, 
+    //        { "type": "laser-pointer-tool", "color": "red", "width": 10, "opacity": 0.6 }, 
+    //        { "type": "trailing-laser-tool*", "color": "red", "width": 10, "opacity": 0.6 }, 
+    //    ]
+    //};
     const configuration = {
-        "theme": "default", // NOT YET IMPLEMENTED
-        "position": "top", // NOT YET IMPLEMENTED
-        "start": [
-            { "type": "width-button", "value": 1 }, 
-            { "type": "width-button*", "value": 2 }, 
-            { "type": "width-button", "value": 10 }, 
-            { "type": "opacity-button*", "value": 1 }, 
-            { "type": "opacity-button", "value": 0.7 }, 
-            { "type": "opacity-button", "value": 0.4 }, 
-            { "type": "dash-pattern-button*", "value": [] }, 
-            { "type": "dash-pattern-button", "value": [7, 3] }, 
-            { "type": "dash-pattern-button", "value": [7, 3, 1, 3] }, 
-            { "type": "color-button", "value": "darkblue" }, 
-            { "type": "color-button", "value": "darkred" }, 
-            { "type": "color-button", "value": "darkgreen" }, 
-            { "type": "color-button", "value": "darkgray" }, 
-            { "type": "color-button", "value": "darkorange" }, 
-            { "type": "color-button", "value": "purple" }, 
-            { "type": "color-button", "value": "cornflowerblue" }, 
+        theme: "default", 
+        position: "top", 
+        start: [
+            { type: "dash-pattern-button*", value: "[]"     }, 
+            { type: "dash-pattern-button",  value: "[7, 3]" }, 
+            { type: "color-button*", value: "darkblue"      }, 
+            { type: "color-button",  value: "darkgreen"     }, 
+            { type: "color-button",  value: "darkred"       }, 
+            { type: "color-button",  value: "#404040"       }, 
+            { type: "color-button",  value: "darkorange"    }, 
+            { type: "color-button",  value: "purple"        }, 
+            { type: "color-button",  value: "blueviolet"    }, 
         ], 
-        "middle": [
-            { "type": "pen-tool", "color": "darkblue", "width": 2, "opacity": 1, "dash": [] }, 
-            { "type": "pen-tool", "color": "darkblue*", "width": "2*", "opacity": "1*", "dash": "[]*" }, 
-            { "type": "pen-tool", "color": "darkblue&", "width": "2&", "opacity": "1&", "dash": "[]&" }, 
-            { "type": "pen-tool", "color": "&", "width": "&", "opacity": "&", "dash": "&" }, 
-            { "type": "pen-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
-            { "type": "line-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
-            { "type": "rectangle-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
-            { "type": "ellipse-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
-            { "type": "delete-tool", "width": "*" }, 
-            { "type": "erase-tool", "width": "*" }, 
-            { "type": "pen-tool", "color": "lightgreen", "width": 16, "opacity": 0.4, "dash": [] }, 
+        middle: [
+            { type: "pen-tool",       color: "*", width: 2, opacity: 1, dash: "[]*" }, 
+            { type: "line-tool",      color: "*", width: 2, opacity: 1, dash: "[]*" }, 
+            { type: "rectangle-tool", color: "*", width: 2, opacity: 1, dash: "[]*" }, 
+            { type: "ellipse-tool",   color: "*", width: 2, opacity: 1, dash: "[]*" }, 
+            { type: "pen-tool",       color: "lightgreen*", width: 16, opacity: 0.4, dash: "[]" }, 
+            { type: "delete-tool",    width: 3 }, 
+            { type: "erase-tool",     width: 10 }, 
         ], 
-        "end": [
-            { "type": "undo" }, 
-            { "type": "redo" }, 
-            { "type": "laser-pointer-tool", "color": "red", "width": 10, "opacity": 0.6 }, 
-            { "type": "trailing-laser-tool*", "color": "red", "width": 10, "opacity": 0.6 }, 
-        ]
+        end: [
+            { type: "undo" }, 
+            { type: "redo" }, 
+            { type: "trailing-laser-tool*", color: "red*", width: 10, opacity: 0.6 }, 
+            { type: "pass-through-tool" }, 
+        ], 
     };
 
     // Initialize the theme. In production, we'll do this via import or fetch. 
@@ -752,18 +807,18 @@ document.addEventListener("DOMContentLoaded", function() {
         "redo":                 '<svg viewBox="0 0 10 10"><path d="M6,8.5 A2.5,3.5 -30 1,1 7.5,4.5 m0.5,-1.5 l-0.5,1.5 -1.5,-0.5" fill="none" stroke="black" stroke-width="0.5" /></svg>', 
         "color-button":         '<svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1" ry="1" style="fill: var(--value); stroke: none;" /></svg>', 
         "width-button":         '<svg viewBox="0 0 10 10"><path d="M5,5 5,5" style="fill: none; stroke: black; stroke-width: calc(var(--value) * 2px); stroke-linecap: round;" /></svg>', 
-        "opacity-button":       '<svg viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="10" style="fill: url(#transparent-background-pattern); opacity: 0.4;" /><circle cx="5" cy="5" r="4" style="fill: black; stroke:none; opacity: var(--value);" /></svg>', 
+        "opacity-button":       '<svg viewBox="0 0 10 10"><path d="M0,0 H2.5 V10 H5 V0 H7.5 V10 H10 V7.5 H0 V5 H10 V2.5 H0 z" style="fill: gray; stroke: none; opacity: 0.25;" /><circle cx="5" cy="5" r="4" style="fill: black; stroke:none; opacity: var(--value);" /></svg>', 
         "dash-pattern-button":  '<svg viewBox="0 0 10 10"><path d="M5,0 V10" style="stroke: black; stroke-width: 0.5; stroke-dasharray: var(--value);" /></svg>', 
-        "pen-tool":             '<svg viewBox="0 0 10 10"><path d="M0,10 S3,2 5,5 7,7 12,0" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
-        "line-tool":            '<svg viewBox="0 0 10 10"><path d="M-3,10 L13,0" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
-        "rectangle-tool":       '<svg viewBox="0 0 10 10"><path d="M1.5,2.5 l7,0 0,5 -7,0 z" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
-        "ellipse-tool":         '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
+        "pen-tool":             '<svg viewBox="0 0 10 10"><path d="M0,0 H2.5 V10 H5 V0 H7.5 V10 H10 V7.5 H0 V5 H10 V2.5 H0 z" style="fill: gray; stroke: none; opacity: 0.25;" /><path d="M0,10 S3,2 5,5 7,7 12,0" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
+        "line-tool":            '<svg viewBox="0 0 10 10"><path d="M0,0 H2.5 V10 H5 V0 H7.5 V10 H10 V7.5 H0 V5 H10 V2.5 H0 z" style="fill: gray; stroke: none; opacity: 0.25;" /><path d="M-3,10 L13,0" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
+        "rectangle-tool":       '<svg viewBox="0 0 10 10"><path d="M0,0 H2.5 V10 H5 V0 H7.5 V10 H10 V7.5 H0 V5 H10 V2.5 H0 z" style="fill: gray; stroke: none; opacity: 0.25;" /><path d="M1.5,2.5 l7,0 0,5 -7,0 z" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
+        "ellipse-tool":         '<svg viewBox="0 0 10 10"><path d="M0,0 H2.5 V10 H5 V0 H7.5 V10 H10 V7.5 H0 V5 H10 V2.5 H0 z" style="fill: gray; stroke: none; opacity: 0.25;" /><circle cx="5" cy="5" r="3" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
         "delete-tool":          '<svg viewBox="0 0 10 10"><path d="M1,2 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0 M1,8 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0" style="fill: none; stroke: black; stroke-width: 1; stroke-linecap: round;" /><path d="M1,5 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0" style="fill: none; stroke: black; stroke-width: 1; stroke-linecap: round; opacity: 0.3;" /><circle cx="8" cy="5.5" r="1.5" style="fill: gray; stroke: none;" /></svg>', 
         "erase-tool":           '<svg viewBox="0 0 10 10"><path d="M1,2 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0 M1,5 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0 M1,8 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0" style="fill: none; stroke: black; stroke-width: 1; stroke-linecap: round;" /><path d="M10,0 3,7" style="fill: none; stroke: white; stroke-width: calc(var(--width) * 1.5px); stroke-linecap: round; opacity: 0.9;" /><path d="M3,7 3,7" style="fill: none; stroke: gray; stroke-width: calc(var(--width) * 1.5px); stroke-linecap: round;" /></svg>', 
         "laser-pointer-tool":   '<svg viewBox="0 0 10 10"><path d="M5,5 5,5" style="fill: none; stroke: var(--color); stroke-width: calc(var(--width) * 1.5px); stroke-linecap: round; opacity: var(--opacity);" /><path d="M1.5,5 l-1.5,0 M8.5,5 l1.5,0 M6.75,8.031 l0.75,1.299 M3.25,8.031 l-0.75,1.299 M6.75,1.969 l0.75,-1.299 M3.25,1.969 l-0.75,-1.299" style="fill: none; stroke: var(--color); stroke-width: 0.5; stroke-linecap: round;" /></svg>', 
         "trailing-laser-tool":  '<svg viewBox="0 0 10 10"><path d="M3,7 L7,3" style="fill: none; stroke: var(--color); stroke-width: calc(var(--width) * 1.5px); stroke-linecap: round; opacity: var(--opacity);" /><path d="M7,3 7,3"  style="fill: none; stroke: var(--color); stroke-width: calc(var(--width) * 1.5px); stroke-linecap: round; opacity: 1;" /></svg>', 
         "pointer-tool":         '<svg viewBox="0 0 10 10"><path d="M8.7,7.5 l-3,1.5 -2,-2 a0.35,0.35 0 0,1 0.7,-0.7 l0.8,0.8 -1.8,-3.6 a0.35,0.35 0 0,1 0.885,-0.443 l1.2,2.4 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.4,0.8 s0.4,0.8 0.4,1.6 z" style="fill: none; stroke: black; stroke-width: 0.3; stroke-linejoin: round;" /><path d="M3.6,3 m-1.3,0 -1,0 M3.6,3 m0,-1.3 0,-1 M3.6,3 m-0.919,-0.919 -0.707,-0.707 M3.6,3 m-0.919,0.919 -0.707,0.707 M3.6,3 m0.919,-0.919 0.707,-0.707" style="fill: none; stroke: gray; stroke-width: 0.5; stroke-linecap: round;" /></svg>', 
-        //"pass-through-tool": 
+        "pass-through-tool":    '<svg viewBox="0 0 10 10"><path d="M8.7,7.5 l-3,1.5 -2,-2 a0.35,0.35 0 0,1 0.7,-0.7 l0.8,0.8 -1.8,-3.6 a0.35,0.35 0 0,1 0.885,-0.443 l1.2,2.4 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.4,0.8 s0.4,0.8 0.4,1.6 z" style="fill: none; stroke: black; stroke-width: 0.3; stroke-linejoin: round;" /><path d="M3.6,3 m-1.3,0 -1,0 M3.6,3 m0,-1.3 0,-1 M3.6,3 m-0.919,-0.919 -0.707,-0.707 M3.6,3 m-0.919,0.919 -0.707,0.707 M3.6,3 m0.919,-0.919 0.707,-0.707" style="fill: none; stroke: gray; stroke-width: 0.5; stroke-linecap: round;" /></svg>', 
     };
 
     // Our registry of all the various tools and other widgets. 
@@ -783,7 +838,37 @@ document.addEventListener("DOMContentLoaded", function() {
         "laser-pointer-tool":   { element: "button", type: "tool", controller: LaserPointerTool }, 
         "trailing-laser-tool":  { element: "button", type: "tool", controller: TrailingLaserTool }, 
         "pointer-tool":         { element: "button", type: "tool", controller: LaserPointerTool }, // To be implemented...
-        "pass-through-tool":    { element: "button", type: "tool", controller: null }, // To be implemented...
+        "pass-through-tool":    { element: "button", type: "tool", controller: PassthroughTool }, 
+    }
+
+    class NotetakerButton extends HTMLButtonElement {
+        constructor() {
+            super();
+        }
+
+        connectedCallback() {
+            if (this._initialized) {
+                return;
+            }
+            this._initialized = true;
+            if (!("type" in this.dataset)) {
+                throw new TypeError("notetaker-button has no 'type' specified");
+            }
+            const type = this.dataset.type;
+            if (!(type in widgetTypes)) {
+                throw new TypeError(`notetaker-button has unknown type ${type}`);
+            }
+            if (widgetTypes[type].type === "property" && 
+                !("value" in this.dataset)) {
+                log(`WARNING: ${type} created with no value specified.`);
+                return;
+            }
+            if (!(type in theme)) {
+                log(`WARNING: ${type} is not in this theme.`);
+                return;
+            }
+            this.innerHTML = theme[type];
+        }
     }
 
     function createWidget(type, attributes, selected) {
@@ -791,15 +876,8 @@ document.addEventListener("DOMContentLoaded", function() {
             log(`WARNING: Tried to create a widget of unknown type "${type}".`);
             return;
         }
-        if (!(type in theme)) {
-            log(`WARNING: Can't create ${type} because it's not in the theme.`);
-            return;
-        }
-        if (widgetTypes[type].type === "property" && !("value" in attributes)) {
-            log(`WARNING: Tried to create a ${type} with no value specified.`);
-            return;
-        }
-        const widget = document.createElement(widgetTypes[type].element);
+        const widget = document.createElement(widgetTypes[type].element, 
+                {is: `notetaker-${widgetTypes[type].element}`});
         widget.dataset.type = type;
         for (var [attribute, value] of Object.entries(attributes)) {
             widget.dataset[attribute] = attributeEncode(value);
@@ -807,7 +885,6 @@ document.addEventListener("DOMContentLoaded", function() {
         if (selected) {
             widget.className = "selected";
         }
-        widget.innerHTML = theme[type];
         return widget;
     }
 
@@ -892,7 +969,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     propertyGroup.add(widget);
                     break;
                 case "tool":
-                    widget._tool = new widgetInfo.controller(widget);
+                    widget._tool = new widgetInfo.controller(widget, target);
                     toolButtons.add(widget);
                     break;
             }
@@ -904,7 +981,8 @@ document.addEventListener("DOMContentLoaded", function() {
         paper.view.draw();
     }
 
+    customElements.define("notetaker-button", NotetakerButton, {extends: "button"});
     initialize(document.getElementById("notetaker"));
-    //initialize(document.getElementById("notetaker_canvas"), document.getElementById("notetaker_toolbar"));
+    //initialize(document.getElementById("notetaker_canvas"), "notetaker_toolbar");
 });
 
