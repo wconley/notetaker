@@ -4,9 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="stylesheet" href="toolbar.css">
-<script src="paper-full.js"></script>
-<script>window.NOTETAKER_DEBUG = true;</script>
-<script type="text/javascript">
+<script src="https://unpkg.com/@ungap/custom-elements/es.js"></script> <!-- Polyfill for Safari, to make customized built-in elements work -->
+<script>
     window.MathJax = {
         chtml: {
             //scale: 1,               // global scaling factor for all expressions
@@ -21,8 +20,10 @@
         }, 
     };
 </script>
-<script type="text/javascript" id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<script id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.1.0.min.js"></script>
+<script src="paper-full.js"></script>
+<script>window.NOTETAKER_DEBUG = true;</script>
 <script src="toolbar.js"></script>
 </head>
 <body>
@@ -44,8 +45,9 @@
     </p>
     <div id="plotly_plot"></div>
   </div>
+  <note-taker></note-taker>
+  <!--
   <div id="notetaker">
-      <!--
     <div id="notetaker_toolbar">
       <div id="notetaker_toolbar_start">
         <button is="notetaker-button" data-type="width-button" data-value="1"></button>
@@ -86,8 +88,8 @@
       </div>
     </div>
     <canvas id="notetaker_canvas"></canvas>
-      -->
   </div>
+  -->
   <script>
     document.addEventListener("DOMContentLoaded", function() {
       var data = [{

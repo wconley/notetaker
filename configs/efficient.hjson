@@ -9,7 +9,6 @@
     { type: "color-button",  value: "darkred"       }, 
     { type: "color-button",  value: "#404040"       }, 
     { type: "color-button",  value: "darkorange"    }, 
-    { type: "color-button",  value: "purple"        }, 
     { type: "color-button",  value: "blueviolet"    }, 
   ], 
   middle: [

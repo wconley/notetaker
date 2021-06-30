@@ -2,11 +2,11 @@
 
 document.addEventListener("DOMContentLoaded", function() {
     "use strict";
-    var properties, toolButtons, history, activeLayer, pointerLayer;
+    //var properties, toolButtons, history, activeLayer, pointerLayer;
 
     // A function for logging error/warning messages, but turned off by default
     function log(message) {
-        if(window.NOTETAKER_DEBUG) {
+        if (window.NOTETAKER_DEBUG) {
             console.log(message);
         }
     }
@@ -46,12 +46,13 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // A class for keeping track of history, for undo/redo (singleton, actually)
     class History {
-        constructor(toolbar) {
+        constructor(notetaker) {
             var button;
             this.history = [];
             this.position = 0;
-            this.undoButtons = toolbar.querySelectorAll('button[data-type="undo"]');
-            this.redoButtons = toolbar.querySelectorAll('button[data-type="redo"]');
+            this.activeLayer = notetaker.activeLayer;
+            this.undoButtons = notetaker.toolbar.querySelectorAll('button[data-type="undo"]');
+            this.redoButtons = notetaker.toolbar.querySelectorAll('button[data-type="redo"]');
             this.undoDisabled = true;
             this.redoDisabled = true;
             for (button of this.undoButtons) {
@@ -87,22 +88,22 @@ document.addEventListener("DOMContentLoaded", function() {
 
         undo() {
             var histItem, i;
-            if(this.position === 0) {
+            if (this.position === 0) {
                 alert("Nothing to undo!") // This shouldn't ever happen
             }
             histItem = this.history[--this.position];
             // REVERSE the effects of the "Delta" in histItem
             for(i = histItem.length - 2; i >= 0; i -= 2) {
-                if(histItem[i] >= 0) {
+                if (histItem[i] >= 0) {
                     // Item histItem[i+1] was added at index histItem[i]. Remove it.
-                    activeLayer.children[histItem[i]].remove();
+                    this.activeLayer.children[histItem[i]].remove();
                 }
                 else {
                     // Item histItem[i+1] was removed from index -histItem[i] - 1. Re-add it.
-                    activeLayer.insertChild(-histItem[i] - 1, histItem[i+1]);
+                    this.activeLayer.insertChild(-histItem[i] - 1, histItem[i+1]);
                 }
             }
-            if(this.position === 0) {
+            if (this.position === 0) {
                 this.undoDisabled = true;
             }
             this.redoDisabled = false;
@@ -110,24 +111,39 @@ document.addEventListener("DOMContentLoaded", function() {
 
         redo() {
             var histItem, i;
-            if(this.position >= this.history.length) {
+            if (this.position >= this.history.length) {
                 alert("Nothing to redo!") // This shouldn't ever happen
             }
             histItem = this.history[this.position++];
             // REAPPLY the effects of the "Delta" in histItem
             for(i = 0; i < histItem.length; i += 2) {
-                if(histItem[i] >= 0) {
+                if (histItem[i] >= 0) {
                     // Add object histItem[i+1] at index histItem[i]
-                    activeLayer.insertChild(histItem[i], histItem[i+1]);
+                    this.activeLayer.insertChild(histItem[i], histItem[i+1]);
                 }
                 else {
                     // Remove object at index -histItem[i] - 1 (object should be the same as histItem[i+1])
-                    activeLayer.children[-histItem[i] - 1].remove();
+                    this.activeLayer.children[-histItem[i] - 1].remove();
                 }
             }
             this.undoDisabled = false;
-            if(this.position === this.history.length) {
+            if (this.position === this.history.length) {
                 this.redoDisabled = true;
+            }
+        }
+
+        logDebugInfo() {
+            console.log("Current paths on active layer:");
+            console.log("    " + this.activeLayer.children.join(", "));
+            console.log("Current history stack:");
+            for (var i = 0; i <= this.history.length; i++) {
+                if (i > 0) {
+                    console.log(`    ${i-1}: ${this.history[i-1].join(", ")}`);
+                }
+                if (this.position === i) {
+                    console.log("    <current top of history stack>    " + 
+                                "(above can be undone, below can be redone)");
+                }
             }
         }
     }
@@ -145,77 +161,87 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // The pass-through tool: Disable all interaction with the notetaker canvas
     class PassthroughTool {
-        constructor(button, canvas) {
-            this.canvas = canvas; // Later, if we make Notetaker a Web Component, this will be passed in differently
+        constructor(button, notetaker) {
+            this.notetaker = notetaker;
         }
 
         activate() {
-            for (var propertyGroup of Object.values(properties)) {
+            for (var propertyGroup of Object.values(this.notetaker.properties)) {
                 propertyGroup.disabled = true;
             }
-            this.canvas.style.pointerEvents = "none";
+            this.notetaker.style.pointerEvents = "none";
         }
 
         deactivate() {
-            this.canvas.style.pointerEvents = "auto";
+            this.notetaker.style.pointerEvents = "auto";
         }
     }
 
     // An abstract base class for the objects that control all other tools
     class NotetakerTool {
-        constructor(button, defaults) {
-            var property, rule, ruleType, ruleValue;
+        constructor(button, notetaker, defaults) {
             this.button = button;
+            this.notetaker = notetaker;
             this.paperTool = null;
             this.rules = {};
-            for (property in defaults) {
-                rule = button.dataset[property] || "*";
-                if (rule === "*") {
-                    ruleType = PROPERTYRULES.VARIABLE;
-                    ruleValue = null;
+            for (var property in defaults) {
+                var userRule = button.dataset[property] || "*";
+                var rule = this.rules[property] = {};
+                if (userRule === "*") {
+                    rule.type = PROPERTYRULES.VARIABLE;
+                    rule.value = null;
                 }
-                else if (rule.endsWith("*")) {
-                    ruleType = PROPERTYRULES.DEFAULT;
-                    ruleValue = attributeDecode(rule.slice(0, -1));
+                else if (userRule.endsWith("*")) {
+                    rule.type = PROPERTYRULES.DEFAULT;
+                    rule.value = attributeDecode(userRule.slice(0, -1));
                 }
-                else if (rule === "&") {
-                    ruleType = PROPERTYRULES.REMEMBER_NOINIT;
-                    ruleValue = null;
+                else if (userRule === "&") {
+                    rule.type = PROPERTYRULES.REMEMBER_NOINIT;
+                    rule.value = null;
                 }
-                else if (rule.endsWith("&")) {
-                    ruleType = PROPERTYRULES.REMEMBER_INIT;
-                    ruleValue = attributeDecode(rule.slice(0, -1));
+                else if (userRule.endsWith("&")) {
+                    rule.type = PROPERTYRULES.REMEMBER_INIT;
+                    rule.value = attributeDecode(userRule.slice(0, -1));
                 }
                 else {
-                    ruleType = PROPERTYRULES.FIXED;
-                    ruleValue = attributeDecode(rule);
+                    rule.type = PROPERTYRULES.FIXED;
+                    rule.value = attributeDecode(userRule);
                 }
-                this.rules[property] = {
-                    ruleType: ruleType, 
-                    ruleValue: ruleValue, 
-                    defaultValue: defaults[property]
-                };
+                // If no property widgets for this property, set property FIXED. 
+                // If also no value specified by userRule, use tool's default. 
+                if (notetaker.properties[property].widgets.size === 0) {
+                    rule.type = PROPERTYRULES.FIXED;
+                    if (rule.value === null) {
+                        rule.value = defaults[property];
+                    }
+                }
+                // If userRule is not "*" or "&", set the button's appearance. 
+                if (rule.value !== null) {
+                    this.setButtonStyle(property, rule.value);
+                }
+                // Make property null. Will be set first time tool is activated. 
                 this[property] = null;
-                if(ruleValue !== null) {
-                    button.style.setProperty(`--${property}`, 
-                            properties[property].cssConverter(ruleValue));
-                }
             }
         }
 
         activate() {
-            for (var [property, rule] of Object.entries(this.rules)) {
-                let propertyGroup = properties[property];
-                switch (rule.ruleType) {
+            for (var property in this.notetaker.properties) {
+                var propertyGroup = this.notetaker.properties[property];
+                if (!(property in this.rules)) {
+                    propertyGroup.disabled = true;
+                    continue;
+                }
+                var rule = this.rules[property];
+                switch (rule.type) {
                     case PROPERTYRULES.VARIABLE:
                         // Always get value from currently selected widget
                         propertyGroup.disabled = false;
                         this[property] = propertyGroup.value;
                         break;
                     case PROPERTYRULES.DEFAULT:
-                        // Use the ruleValue, but allow it to be changed. 
+                        // Use the rule.value, but allow it to be changed. 
                         propertyGroup.disabled = false;
-                        this[property] = rule.ruleValue;
+                        this[property] = rule.value;
                         propertyGroup.selectValue(this[property]);
                         break;
                     case PROPERTYRULES.REMEMBER_NOINIT:
@@ -223,8 +249,7 @@ document.addEventListener("DOMContentLoaded", function() {
                         propertyGroup.disabled = false;
                         if (this[property] === null) {
                             this[property] = propertyGroup.value;
-                            this.button.style.setProperty(`--${property}`, 
-                                    propertyGroup.cssConverter(this[property]));
+                            this.setButtonStyle(property, this[property]);
                         }
                         else {
                             propertyGroup.selectValue(this[property]);
@@ -234,23 +259,15 @@ document.addEventListener("DOMContentLoaded", function() {
                         // Keep value as it is... unless null (first activation)
                         propertyGroup.disabled = false;
                         if (this[property] === null) {
-                            this[property] = rule.ruleValue;
+                            this[property] = rule.value;
                         }
                         propertyGroup.selectValue(this[property]);
                         break;
                     case PROPERTYRULES.FIXED:
-                        // Use the ruleValue, and disable changes. 
-                        this[property] = rule.ruleValue;
+                        // Use the rule.value, and disable changes. 
+                        this[property] = rule.value;
                         propertyGroup.disabled = true;
                         break;
-                }
-                if (this[property] === null) {
-                    this[property] = rule.defaultValue;
-                }
-            }
-            for (property in properties) {
-                if (!(property in this.rules)) {
-                    properties[property].disabled = true;
                 }
             }
             if (!this.paperTool) {
@@ -262,28 +279,33 @@ document.addEventListener("DOMContentLoaded", function() {
             this.paperTool.activate();
         }
 
-        deactivate() {
-            for (var [property, rule] of Object.entries(this.rules)) {
-                if (rule.ruleType === PROPERTYRULES.DEFAULT) {
-                    this.button.style.setProperty(`--${property}`, 
-                            properties[property].cssConverter(rule.ruleValue));
-                }
-            }
+        setButtonStyle(property, value) {
+            value = this.notetaker.properties[property].cssConverter(value);
+            this.button.style.setProperty(`--${property}`, value);
         }
 
         setProperty(property, value) {
-            if (this.rules[property].ruleType !== PROPERTYRULES.VARIABLE) {
-                this.button.style.setProperty(`--${property}`, 
-                        properties[property].cssConverter(value));
+            if (this.rules[property].type !== PROPERTYRULES.VARIABLE) {
+                this.setButtonStyle(property, value);
             }
             this[property] = value;
+        }
+
+        deactivate() {
+            for (var [property, rule] of Object.entries(this.rules)) {
+                if (rule.type === PROPERTYRULES.DEFAULT) {
+                    this.setButtonStyle(property, rule.value);
+                }
+            }
         }
     }
 
     // A (slightly more specific, still abstract) subclass for the drawing tools
     class DrawingTool extends NotetakerTool {
-        constructor(button) {
-            super(button, {color: "black", width: 1, opacity: 1, dash: []});
+        constructor(button, notetaker, defaults) {
+            // NEED TO ADD ABILITY TO INCLUDE MORE DEFAULTS, LIKE SNAP
+            super(button, notetaker, {color: "black", width: 1, opacity: 1, 
+                    dash: []});
         }
 
         get dash_scaled() {
@@ -294,7 +316,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // The pen tool: Draw freehand lines/curves
     class PenTool extends DrawingTool {
         onMouseDown(event) {
-            history.noMoreRedos();
+            this.notetaker.history.noMoreRedos();
             this.currentPath = new paper.Path({
                 segments: [event.point], 
                 strokeColor: this.color, 
@@ -312,20 +334,21 @@ document.addEventListener("DOMContentLoaded", function() {
 
         onMouseUp(event) {
             this.currentPath.simplify(2.5);
-            history.add([this.currentPath.index, this.currentPath]);
+            this.notetaker.history.add([this.currentPath.index, 
+                    this.currentPath]);
         }
     }
 
     // The line tool: draw straight lines, optionally snap to increments of pi/4
     class LineTool extends DrawingTool {
-        constructor(button) {
-            super(button);
+        constructor(button, notetaker) {
+            super(button, notetaker);
             this.snapTolerance = 20; // Set to -1 to disable snap
             this.firstPoint = null;
         }
 
         onMouseDown(event) {
-            history.noMoreRedos();
+            this.notetaker.history.noMoreRedos();
             this.firstPoint = event.point;
             this.currentPath = new paper.Path({
                 segments: [event.point, event.point], 
@@ -343,19 +366,19 @@ document.addEventListener("DOMContentLoaded", function() {
             var deltaY = point.y - this.firstPoint.y;
             var snap = this.snapTolerance;
             var offset;
-            if(snap > 0 && deltaX * deltaX + deltaY * deltaY >= 2*snap*snap) {
-                if(Math.abs(deltaY) < snap) {
+            if (snap > 0 && deltaX * deltaX + deltaY * deltaY >= 2*snap*snap) {
+                if (Math.abs(deltaY) < snap) {
                     point.y = this.firstPoint.y;
                 }
-                else if(Math.abs(deltaX) < snap) {
+                else if (Math.abs(deltaX) < snap) {
                     point.x = this.firstPoint.x;
                 }
-                else if(Math.abs(deltaX - deltaY) < Math.sqrt(2)*snap) {
+                else if (Math.abs(deltaX - deltaY) < Math.sqrt(2)*snap) {
                     offset = (deltaX + deltaY) / 2;
                     point.x = this.firstPoint.x + offset;
                     point.y = this.firstPoint.y + offset;
                 }
-                else if(Math.abs(deltaX + deltaY) < Math.sqrt(2)*snap) {
+                else if (Math.abs(deltaX + deltaY) < Math.sqrt(2)*snap) {
                     offset = (deltaX - deltaY) / 2;
                     point.x = this.firstPoint.x + offset;
                     point.y = this.firstPoint.y - offset;
@@ -365,14 +388,15 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseUp(event) {
-            history.add([this.currentPath.index, this.currentPath]);
+            this.notetaker.history.add([this.currentPath.index, 
+                    this.currentPath]);
         }
     }
 
     // The rectangle tool: draw rectangles, optionally snap to squares
     class RectangleTool extends DrawingTool {
-        constructor(button) {
-            super(button);
+        constructor(button, notetaker) {
+            super(button, notetaker);
             this.snapTolerance = 20; // Set to -1 to disable snap
             this.firstPoint = null;
         }
@@ -382,7 +406,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseDown(event) {
-            history.noMoreRedos();
+            this.notetaker.history.noMoreRedos();
             this.firstPoint = event.point;
             this.currentPath = new paper.Path({
                 segments: this.rectangle(event.point, event.point), 
@@ -401,13 +425,13 @@ document.addEventListener("DOMContentLoaded", function() {
             var deltaY = point.y - this.firstPoint.y;
             var snap = this.snapTolerance;
             var offset;
-            if(snap > 0 && deltaX * deltaX + deltaY * deltaY >= 2*snap*snap) {
-                if(Math.abs(deltaX - deltaY) < Math.sqrt(2)*snap) {
+            if (snap > 0 && deltaX * deltaX + deltaY * deltaY >= 2*snap*snap) {
+                if (Math.abs(deltaX - deltaY) < Math.sqrt(2)*snap) {
                     offset = (deltaX + deltaY) / 2;
                     point.x = this.firstPoint.x + offset;
                     point.y = this.firstPoint.y + offset;
                 }
-                else if(Math.abs(deltaX + deltaY) < Math.sqrt(2)*snap) {
+                else if (Math.abs(deltaX + deltaY) < Math.sqrt(2)*snap) {
                     offset = (deltaX - deltaY) / 2;
                     point.x = this.firstPoint.x + offset;
                     point.y = this.firstPoint.y - offset;
@@ -417,20 +441,21 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseUp(event) {
-            history.add([this.currentPath.index, this.currentPath]);
+            this.notetaker.history.add([this.currentPath.index, 
+                    this.currentPath]);
         }
     }
 
     // The ellipse tool: draw ellipses, from center, optionally snap to circles
     class EllipseTool extends DrawingTool {
-        constructor(button) {
-            super(button);
-            this.snapTolerance = 20; // Set to -1 to disable snap
+        constructor(button, notetaker) {
+            super(button, notetaker);
+            this.snapTolerance = 20; // 0 disables snap, negative makes circles
             this.center = null;
         }
 
         onMouseDown(event) {
-            history.noMoreRedos();
+            this.notetaker.history.noMoreRedos();
             this.center = event.point;
             this.currentPath = new paper.Path({
                 segments: [event.point], 
@@ -443,11 +468,15 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseDrag(event) {
-            var point = event.point;
+            const point = event.point;
+            const snap = this.snapTolerance;
             var xradius = Math.abs(point.x - this.center.x);
             var yradius = Math.abs(point.y - this.center.y);
-            var snap = this.snapTolerance;
-            if(snap > 0 && xradius * xradius + yradius * yradius >= 2*snap*snap 
+            const hypotenuseSquared = xradius * xradius + yradius * yradius;
+            if (snap < 0) {
+                xradius = yradius = Math.sqrt(hypotenuseSquared);
+            }
+            if (snap > 0 && hypotenuseSquared >= 2*snap*snap 
                && Math.abs(xradius - yradius) < Math.sqrt(2)*snap) {
                 xradius = yradius = (xradius + yradius) / 2;
             }
@@ -458,19 +487,20 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseUp(event) {
-            history.add([this.currentPath.index, this.currentPath]);
+            this.notetaker.history.add([this.currentPath.index, 
+                    this.currentPath]);
         }
     }
 
     // The delete tool: delete whole strokes (lines/curves/rectangles/etc)
     class DeleteTool extends NotetakerTool {
-        constructor(button) {
-            super(button, {width: 4});
+        constructor(button, notetaker) {
+            super(button, notetaker, {width: 4});
             this.hitTestOptions = {fill: true, stroke: true, segments: true};
         }
 
         onMouseDown(event) {
-            history.noMoreRedos();
+            this.notetaker.history.noMoreRedos();
             this.hitTestOptions.tolerance = this.width;
             this.toBeRemoved = {};
             this.removeItemsAt(event.point);
@@ -484,7 +514,7 @@ document.addEventListener("DOMContentLoaded", function() {
             var results = paper.project.hitTestAll(point, this.hitTestOptions);
             for(var result of results) {
                 var item = result.item;
-                if(!item.ignore && !this.toBeRemoved[item.index]) {
+                if (!item.ignore && !this.toBeRemoved[item.index]) {
                     item.opacity *= 0.4;
                     this.toBeRemoved[item.index] = item;
                 }
@@ -498,20 +528,20 @@ document.addEventListener("DOMContentLoaded", function() {
                 item.remove();
                 item.opacity /= 0.4;
             }
-            if(histItem.length > 0) {
-                history.add(histItem);
+            if (histItem.length > 0) {
+                this.notetaker.history.add(histItem);
             }
         }
     }
 
     // The erase tool: cover up previously drawn ink, and also divide paths
     class EraseTool extends NotetakerTool {
-        constructor(button) {
-            super(button, {width: 10});
+        constructor(button, notetaker) {
+            super(button, notetaker, {width: 10});
         }
 
         onMouseDown(event) {
-            history.noMoreRedos();
+            this.notetaker.history.noMoreRedos();
             this.currentPath = new paper.Path({
                 blendMode: "destination-out", 
                 segments: [event.point], 
@@ -532,22 +562,22 @@ document.addEventListener("DOMContentLoaded", function() {
             var histItem, i, path;
             this.currentPath.simplify(2.5);
             histItem = [this.currentPath.index, this.currentPath];
-            for(i = 0; path = activeLayer.children[i]; i++) {
-                if(path.blendMode === "destination-out") {
+            for(i = 0; path = this.notetaker.activeLayer.children[i]; i++) {
+                if (path.blendMode === "destination-out") {
                     continue;
                 }
                 let intersections = path.getIntersections(this.currentPath);
-                if(intersections.length) {
+                if (intersections.length) {
                     let pathCopy = path.clone({insert: false, deep: false});
                     intersections = pathCopy.getIntersections(this.currentPath);
                     let newPaths = [];
                     for(let intersection of intersections.reverse()) {
                         let newPath = pathCopy.splitAt(intersection);
-                        if(newPath) {
+                        if (newPath && newPath !== pathCopy) {
                             newPaths.push(newPath);
                         }
                     }
-                    if(newPaths.length) {
+                    if (newPaths.length || (path.closed && !pathCopy.closed)) {
                         let index = path.index;
                         histItem.push(-index - 1, path);
                         path.remove();
@@ -555,32 +585,33 @@ document.addEventListener("DOMContentLoaded", function() {
                         newPaths.forEach((newPath, j) => {
                             histItem.push(index + j, newPath);
                         });
-                        activeLayer.insertChildren(index, newPaths);
+                        this.notetaker.activeLayer.insertChildren(index, 
+                                newPaths);
                         i = pathCopy.index;
                     }
                 }
             }
-            history.add(histItem);
+            this.notetaker.history.add(histItem);
         }
     }
 
     // The laser-pointer tool: show a colored dot under the pointer
     class LaserPointerTool extends NotetakerTool {
-        constructor(button) {
-            super(button, {color: "red", width: 10, opacity: 0.6, 
-                           fade: {duration: 500, easing: "easeInQuad"}});
+        constructor(button, notetaker) {
+            super(button, notetaker, {color: "red", width: 10, opacity: 0.6, 
+                    fade: {duration: 500, easing: "easeInQuad"}});
             this.point = new paper.Path({
                 segments: [], 
                 strokeCap: "round", 
                 strokeJoin: "round", 
             });
             this.point.ignore = true;
-            this.point.addTo(pointerLayer);
+            this.point.addTo(this.notetaker.pointerLayer);
             this.tween = null;
         }
 
         onMouseDown(event) {
-            if(this.tween) {
+            if (this.tween) {
                 this.tween.stop();
                 this.tween = null;
             }
@@ -602,19 +633,19 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // The "trailing-laser" tool: laser pointer, but with "trails" that fade out
     class TrailingLaserTool extends NotetakerTool {
-        constructor(button) {
-            super(button, {color: "red", width: 10, opacity: 0.6, 
-                           fade: {duration: 2000, easing: "easeInCubic"}});
+        constructor(button, notetaker) {
+            super(button, notetaker, {color: "red", width: 10, opacity: 0.6, 
+                    fade: {duration: 2000, easing: "easeInCubic"}});
             this.paths = new paper.CompoundPath({
                 strokeCap: "round", 
                 strokeJoin: "round", 
             });
-            this.paths.addTo(pointerLayer);
+            this.paths.addTo(this.notetaker.pointerLayer);
             this.tween = null;
         }
 
         onMouseDown(event) {
-            if(this.tween) {
+            if (this.tween) {
                 this.tween.stop();
                 this.tween = null;
             }
@@ -676,24 +707,24 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // WidgetGroup for a set of widgets that control a certain tool property
     class PropertyWidgetGroup extends WidgetGroup {
-        constructor(property, toolbar, cssConverter) {
+        constructor(property, notetaker, cssConverter) {
             super();
             this.property = property;
-            this.toolbar = toolbar;
+            this.notetaker = notetaker;
             this.cssConverter = cssConverter ? cssConverter : (x => x);
         }
 
         select(widget) {
             super.select(widget);
-            this.toolbar.style.setProperty(`--${this.property}`, 
+            this.notetaker.toolbar.style.setProperty(`--${this.property}`, 
                     this.cssConverter(widget._value));
         }
 
         click(event) {
             var widget = event.currentTarget;
             this.select(widget);
-            var current = toolButtons.selected;
-            if(current) {
+            var current = this.notetaker.toolButtons.selected;
+            if (current) {
                 current._tool.setProperty(this.property, widget._value);
             }
         }
@@ -780,7 +811,6 @@ document.addEventListener("DOMContentLoaded", function() {
             { type: "color-button",  value: "darkred"       }, 
             { type: "color-button",  value: "#404040"       }, 
             { type: "color-button",  value: "darkorange"    }, 
-            { type: "color-button",  value: "purple"        }, 
             { type: "color-button",  value: "blueviolet"    }, 
         ], 
         middle: [
@@ -802,7 +832,50 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Initialize the theme. In production, we'll do this via import or fetch. 
     const theme = {
-        stylesheet: "", 
+        stylesheet: "\
+            :host { \n\
+                display: flex; \n\
+                flex-direction: column; \n\
+            } \n\
+            :host > div { \n\
+                pointer-events: auto; \n\
+                flex: none; \n\
+                height: 2em; \n\
+                display: flex; \n\
+                flex-direction: row; \n\
+                justify-content: space-between; \n\
+                background-color: dimgray; \n\
+            } \n\
+            :host > canvas { \n\
+                flex: auto; \n\
+            } \n\
+            .toolbar-section { \n\
+                flex: none; \n\
+                height: 2em; \n\
+            } \n\
+            button { \n\
+                font-size: 100%; \n\
+                width: 2em; \n\
+                height: 2em; \n\
+                border: none; \n\
+                margin: 0 0.1em; \n\
+                padding: 0; \n\
+            } \n\
+            button:disabled { \n\
+                filter: grayscale(100%); \n\
+            } \n\
+            button:disabled:hover { \n\
+                background-color: inherit; \n\
+            } \n\
+            button:focus { \n\
+                outline-offset: 0px; \n\
+            } \n\
+            button.selected { \n\
+                border: 1px solid red; \n\
+            } \n\
+            button:disabled.selected { \n\
+                border: none; \n\
+            }", 
         "undo":                 '<svg viewBox="0 0 10 10"><path d="M4,8.5 A2.5,3.5 30 1,0 2.5,4.5 m-0.5,-1.5 l0.5,1.5 1.5,-0.5" fill="none" stroke="black" stroke-width="0.5" /></svg>', 
         "redo":                 '<svg viewBox="0 0 10 10"><path d="M6,8.5 A2.5,3.5 -30 1,1 7.5,4.5 m0.5,-1.5 l-0.5,1.5 -1.5,-0.5" fill="none" stroke="black" stroke-width="0.5" /></svg>', 
         "color-button":         '<svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1" ry="1" style="fill: var(--value); stroke: none;" /></svg>', 
@@ -888,101 +961,111 @@ document.addEventListener("DOMContentLoaded", function() {
         return widget;
     }
 
-    function initialize(target, toolbarId) {
-        var toolbar, canvas, widget;
-
-        // First, we configure the toolbar elements if necessary (DOM first!)
-        if (toolbarId && (toolbar = document.getElementById(toolbarId))) {
-            if (target.constructor.name === "HTMLCanvasElement") {
-                canvas = target;
-            }
-            else {
-                canvas = document.createElement("canvas");
-                target.appendChild(canvas);
-            }
+    class Notetaker extends HTMLElement {
+        constructor() {
+            super();
+            this.activeLayer = null;
+            this.pointerLayer = null;
+            this.properties = null;
+            this.toolButtons = null;
+            this.history = null;
         }
-        else {
-            toolbar = document.createElement("div");
-            toolbar.id = "notetaker_toolbar"; // Later we'll probably just apply these styles directly? 
+
+        connectedCallback() {
+            if (this._initialized) {
+                return;
+            }
+            this._initialized = true;
+            var widget;
+            // Fetch both the configuration and the theme JSON data
+            //const configUrl = this.dataset["config-href"];
+            //if (!configUrl) {
+            //    throw new ReferenceError("note-taker: No config specified");
+            //}
+            //document.fetch(configUrl).then(this.gotConfig.bind(this));
+            // Set up an inner style sheet, in the Shadow DOM
+            //     Note: We may eventually allow for <link> stylesheets as well
+            const style = document.createElement("style");
+            style.textContent = theme.stylesheet;
+            // Now create the toolbar, and populate it (using the configuration object)
+            this.toolbar = document.createElement("div");
             for (const part of ["start", "middle", "end"]) {
-                if (!(part in configuration)) {
-                    continue;
-                }
                 const toolbar_part = document.createElement("div");
-                toolbar_part.id = `notetaker_toolbar_${part}`;
-                for (widget of configuration[part]) {
-                    let {type, ...attributes} = widget;
-                    let selected = type.endsWith("*");
-                    type = selected ? type.slice(0, -1) : type;
-                    widget = createWidget(type, attributes, selected);
-                    toolbar_part.appendChild(widget);
+                toolbar_part.className = "toolbar_section";
+                if (part in configuration) {
+                    for (widget of configuration[part]) {
+                        let {type, ...attributes} = widget;
+                        let selected = type.endsWith("*");
+                        type = selected ? type.slice(0, -1) : type;
+                        widget = createWidget(type, attributes, selected);
+                        toolbar_part.appendChild(widget);
+                    }
                 }
-                toolbar.appendChild(toolbar_part);
+                this.toolbar.appendChild(toolbar_part);
             }
-            target.appendChild(toolbar);
-            canvas = document.createElement("canvas");
-            canvas.id = "notetaker_canvas"; // Later we'll probably just apply these styles directly? 
-            target.appendChild(canvas);
-        }
+            const canvas = document.createElement("canvas");
+            this.attachShadow({mode: "open"});
+            this.shadowRoot.append(style, this.toolbar, canvas);
 
-        // Now that we've got our canvas, we can set up PaperJS
-        paper.setup(canvas);                // Note this must be done before 
-        activeLayer = new paper.Layer();    // instantiating the tools, because 
-        pointerLayer = new paper.Layer();   // some of their constructors (laser 
-        activeLayer.activate();             // pointers) need the pointerLayer. 
+            // Now that we've got our canvas, we can set up PaperJS
+            paper.setup(canvas);                    // Note this must be done 
+            this.activeLayer = new paper.Layer();   // before instantiating the 
+            this.pointerLayer = new paper.Layer();  // tools, as some of them 
+            this.activeLayer.activate();            // need the pointerLayer. 
 
-        // Now set up the WidgetGroups for the property widgets... 
-        const cssConverters = {
-            width: x => (x ** 0.75 / 2), 
-            dash: x => (x.length ? x.map(y => y / 3) : [100, 0]), 
-        }
-        properties = new Proxy({}, {
-            get: (object, property) => {
-                if (!(property in object)) {
-                    object[property] = new PropertyWidgetGroup(
-                            property, toolbar, cssConverters[property]);
+            // Now set up the WidgetGroups for the property widgets... 
+            const cssConverters = {
+                width: x => (x ** 0.75 / 2), 
+                dash: x => (x.length ? x.map(y => y / 3) : [100, 0]), 
+            }
+            this.properties = new Proxy({}, {
+                get: (object, property) => {
+                    if (!(property in object)) {
+                        object[property] = new PropertyWidgetGroup(
+                                property, this, cssConverters[property]);
+                    }
+                    return object[property];
                 }
-                return object[property];
-            }
-        });
+            });
 
-        // ...and the tool buttons. 
-        toolButtons = new WidgetGroup();
-        toolButtons.click = function(event) {
-            var button = event.currentTarget;
-            if (this._selected !== button) {
-                this._selected._tool.deactivate();
-            }
-            this.select(button);
-            button._tool.activate();
-        };
+            // ...and the tool buttons. 
+            this.toolButtons = new WidgetGroup();
+            this.toolButtons.click = function(event) {
+                var button = event.currentTarget;
+                if (this._selected !== button) {
+                    this._selected._tool.deactivate();
+                }
+                this.select(button);
+                button._tool.activate();
+            };
 
-        // Finally we set up and configure the controllers for all those widgets
-        for (widget of toolbar.querySelectorAll("button, input")) {
-            let widgetInfo = widgetTypes[widget.dataset.type];
-            switch(widgetInfo.type) {
-                case "property":
-                    let propertyGroup = properties[widgetInfo.property];
-                    widget._value = attributeDecode(widget.dataset.value);
-                    widget.style.setProperty("--value", 
-                            propertyGroup.cssConverter(widget._value));
-                    propertyGroup.add(widget);
-                    break;
-                case "tool":
-                    widget._tool = new widgetInfo.controller(widget, target);
-                    toolButtons.add(widget);
-                    break;
+            // Finally we set up/configure the controllers for all those widgets
+            for (widget of this.toolbar.querySelectorAll("button, input")) {
+                let widgetInfo = widgetTypes[widget.dataset.type];
+                switch(widgetInfo.type) {
+                    case "property":
+                        let propertyGroup = this.properties[widgetInfo.property];
+                        widget._value = attributeDecode(widget.dataset.value);
+                        widget.style.setProperty("--value", 
+                                propertyGroup.cssConverter(widget._value));
+                        propertyGroup.add(widget);
+                        break;
+                    case "tool":
+                        widget._tool = new widgetInfo.controller(widget, this);
+                        this.toolButtons.add(widget);
+                        break;
+                }
             }
+
+            // Set up the history, and activate our first tool! 
+            this.history = new History(this);
+            this.toolButtons.selected._tool.activate();
+            paper.view.draw();
         }
-
-        // Set up the history, and activate our first tool! 
-        history = new History(toolbar);
-        toolButtons.selected._tool.activate();
-        paper.view.draw();
     }
 
+    // Define our two custom elements. 
     customElements.define("notetaker-button", NotetakerButton, {extends: "button"});
-    initialize(document.getElementById("notetaker"));
-    //initialize(document.getElementById("notetaker_canvas"), "notetaker_toolbar");
+    customElements.define("note-taker", Notetaker);
 });
 

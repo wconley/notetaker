@@ -1,0 +1,50 @@
+/*@font-face {*/
+    /*font-family: 'MathJax_Main';*/
+    /*src: url('https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2/MathJax_Main-Regular.woff') format('woff');*/
+    /*font-weight: normal;*/
+    /*font-style: normal;*/
+    /*[>ascent-override: 1000%;<]*/
+/*}*/
+
+/*@font-face {*/
+    /*font-family: 'MathJax_Main';*/
+    /*src: url('https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2/MathJax_Main-Bold.woff') format('woff');*/
+    /*font-weight: bold;*/
+    /*font-style: normal;*/
+/*}*/
+
+/*@font-face {*/
+    /*font-family: 'MathJax_Main';*/
+    /*src: url('https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2/MathJax_Main-Italic.woff') format('woff');*/
+    /*font-weight: normal;*/
+    /*font-style: italic;*/
+/*}*/
+
+#main_content {
+    --definition-color: red;
+    width: 40em;
+    margin: 3em auto 0 auto;
+    /*font-family: MJXZERO, MJXTEX, serif;*/
+    /*font-family: MathJax_Main, serif;*/
+    font-size: 120%;
+}
+
+span.define {
+    font-style: italic;
+    color: var(--definition-color);
+}
+
+
+/* Our custom note-taker element. Now, all other styling of this element and its 
+ * contents is internal to this component, in its shadow DOM. Note that we still 
+ * want to set its position on the page and its dimensions, as well as its 
+ * z-index (if it's absolutely positioned) here, not internally. */
+note-taker {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 999;
+}
+
