@@ -1,5 +1,73 @@
 {
-  stylesheet: "", // Not yet implemented. Need to figure out how to do this. 
+  stylesheet: '''
+    :host {
+        direction: ltr;
+        writing-mode: horizontal-tb;
+        display: flex;
+    }
+    :host([toolbar=top]) {
+        flex-direction: column;
+    }
+    :host([toolbar=bottom]) {
+        flex-direction: column-reverse;
+    }
+    :host([toolbar=left]) {
+        flex-direction: row;
+    }
+    :host([toolbar=right]) {
+        flex-direction: row-reverse;
+    }
+    :host > div {
+        pointer-events: auto;
+        flex: none;
+        height: 2em;
+        display: flex;
+        justify-content: space-between;
+        background-color: var(--notetaker-toolbar-background, cornflowerblue);
+    }
+    :host([toolbar=top]) > div, :host([toolbar=bottom]) > div {
+        flex-direction: row;
+    }
+    :host([toolbar=left]) > div, :host([toolbar=right]) > div {
+        flex-direction: column;
+    }
+    :host > canvas {
+        flex: auto;
+    }
+    .toolbar-section {
+        flex: none;
+        height: 2em;
+    }
+    button {
+        font-size: 100%;
+        width: 2em;
+        height: 2em;
+        border: 1.5px outset silver;
+        border-radius: 10%;
+        padding: 0;
+        background-color: white;
+    }
+    button:hover {
+        background-color: gainsboro;
+    }
+    button:focus {
+        outline-offset: 0px;
+    }
+    button.selected {
+        border: 1.5px outset indianred;
+        /*border: 1px solid red;*/
+    }
+    button:disabled, button:disabled:hover, button:disabled.selected {
+        border: 1.5px solid darkgray;
+        background-color: darkgray;
+    }
+    :host([toolbar=top]) button, :host([toolbar=bottom]) button {
+        margin: 0 0.1em;
+    }
+    :host([toolbar=left]) button, :host([toolbar=right]) button {
+        margin: 0.1em 0;
+    }
+    '''
   undo: '''
     <svg viewBox="0 0 10 10">
       <path d="M4,8.5 A2.5,3.5 30 1,0 2.5,4.5 m-0.5,-1.5 l0.5,1.5 1.5,-0.5" 
@@ -121,26 +189,33 @@
               opacity: 1;" />
     </svg>
     '''
-  // The following two haven't been implemented yet. But I made a nice icon for 
-  // the first, so I'll keep that here. :-)
-  # pointer-tool: '''
-  #   <svg viewBox="0 0 10 10">
-  #   <path d="M8.7,7.5 l-3,1.5 -2,-2 a0.35,0.35 0 0,1 0.7,-0.7 l0.8,0.8 
-  #             -1.8,-3.6 a0.35,0.35 0 0,1 0.885,-0.443 l1.2,2.4 -0.5,-1 
-  #             a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 
-  #             0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 
-  #             l0.4,0.8 s0.4,0.8 0.4,1.6 z" style="fill: none; stroke: black; 
-  #             stroke-width: 0.3; stroke-linejoin: round;" />
-  #   <path d="M3.6,3 m-1.3,0 -1,0 M3.6,3 m0,-1.3 0,-1 M3.6,3 m-0.919,-0.919 
-  #             -0.707,-0.707 M3.6,3 m-0.919,0.919 -0.707,0.707 M3.6,3 
-  #             m0.919,-0.919 0.707,-0.707" style="fill: none; stroke: gray; 
-  #             stroke-width: 0.5; stroke-linecap: round;" />
-  #   </svg>
-  #   '''
-  # pass-through-tool: '''
-  #   <svg viewBox="0 0 10 10">
-  #   // Should be a mouse-pointer-like arrow, I think
-  #   </svg>
-  #   '''
+  pointer-tool: '''
+    <svg viewBox="0 0 10 10">
+      <path d="M8.7,7.5 l-3,1.5 -2,-2 a0.35,0.35 0 0,1 0.7,-0.7 l0.8,0.8 
+              -1.8,-3.6 a0.35,0.35 0 0,1 0.885,-0.443 l1.2,2.4 -0.5,-1 
+              a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 
+              0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 
+              l0.4,0.8 s0.4,0.8 0.4,1.6 z" style="fill: none; stroke: black; 
+              stroke-width: 0.3; stroke-linejoin: round;" />
+      <path d="M3.6,3 m-1.3,0 -1,0 M3.6,3 m0,-1.3 0,-1 M3.6,3 m-0.919,-0.919 
+              -0.707,-0.707 M3.6,3 m-0.919,0.919 -0.707,0.707 M3.6,3 
+              m0.919,-0.919 0.707,-0.707" style="fill: none; stroke: gray; 
+              stroke-width: 0.5; stroke-linecap: round;" />
+    </svg>
+    '''
+  pass-through-tool: '''
+    <svg viewBox="0 0 10 10">
+      <path d="M8.7,7.5 l-3,1.5 -2,-2 a0.35,0.35 0 0,1 0.7,-0.7 l0.8,0.8 
+              -1.8,-3.6 a0.35,0.35 0 0,1 0.885,-0.443 l1.2,2.4 -0.5,-1 
+              a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 
+              0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 
+              l0.4,0.8 s0.4,0.8 0.4,1.6 z" style="fill: none; stroke: black; 
+              stroke-width: 0.3; stroke-linejoin: round;" />
+      <path d="M3.6,3 m-1.3,0 -1,0 M3.6,3 m0,-1.3 0,-1 M3.6,3 m-0.919,-0.919 
+              -0.707,-0.707 M3.6,3 m-0.919,0.919 -0.707,0.707 M3.6,3 
+              m0.919,-0.919 0.707,-0.707" style="fill: none; stroke: gray; 
+              stroke-width: 0.5; stroke-linecap: round;" />
+    </svg>
+    '''
 }
 

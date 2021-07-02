@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<link rel="stylesheet" href="toolbar.css">
+<link rel="stylesheet" href="notetaker_test.css">
 <script src="https://unpkg.com/@ungap/custom-elements/es.js"></script> <!-- Polyfill for Safari, to make customized built-in elements work -->
 <script>
     window.MathJax = {
@@ -24,7 +24,7 @@
 <script src="https://cdn.plot.ly/plotly-2.1.0.min.js"></script>
 <script src="paper-full.js"></script>
 <script>window.NOTETAKER_DEBUG = true;</script>
-<script src="toolbar.js"></script>
+<script src="notetaker.js"></script>
 </head>
 <body>
   <div id="main_content">
@@ -45,7 +45,7 @@
     </p>
     <div id="plotly_plot"></div>
   </div>
-  <note-taker></note-taker>
+  <note-taker config-href="config/testing.json"></note-taker>
   <!--
   <div id="notetaker">
     <div id="notetaker_toolbar">

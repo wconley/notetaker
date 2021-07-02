@@ -2,7 +2,7 @@
 
 document.addEventListener("DOMContentLoaded", function() {
     "use strict";
-    //var properties, toolButtons, history, activeLayer, pointerLayer;
+    var theme = null, configuration = null;
 
     // A function for logging error/warning messages, but turned off by default
     function log(message) {
@@ -303,9 +303,9 @@ document.addEventListener("DOMContentLoaded", function() {
     // A (slightly more specific, still abstract) subclass for the drawing tools
     class DrawingTool extends NotetakerTool {
         constructor(button, notetaker, defaults) {
-            // NEED TO ADD ABILITY TO INCLUDE MORE DEFAULTS, LIKE SNAP
-            super(button, notetaker, {color: "black", width: 1, opacity: 1, 
-                    dash: []});
+            defaults = {color: "black", width: 1, opacity: 1, dash: [], 
+                        ...defaults};
+            super(button, notetaker, defaults);
         }
 
         get dash_scaled() {
@@ -315,6 +315,10 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // The pen tool: Draw freehand lines/curves
     class PenTool extends DrawingTool {
+        constructor(button, notetaker) {
+            super(button, notetaker, {simplify: 2.5});
+        }
+
         onMouseDown(event) {
             this.notetaker.history.noMoreRedos();
             this.currentPath = new paper.Path({
@@ -333,7 +337,9 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseUp(event) {
-            this.currentPath.simplify(2.5);
+            if (this.simplify >= 0) {
+                this.currentPath.simplify(this.simplify);
+            }
             this.notetaker.history.add([this.currentPath.index, 
                     this.currentPath]);
         }
@@ -342,9 +348,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // The line tool: draw straight lines, optionally snap to increments of pi/4
     class LineTool extends DrawingTool {
         constructor(button, notetaker) {
-            super(button, notetaker);
-            this.snapTolerance = 20; // Set to -1 to disable snap
-            this.firstPoint = null;
+            super(button, notetaker, {snap: 20});
         }
 
         onMouseDown(event) {
@@ -361,24 +365,31 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseDrag(event) {
-            var point = event.point;
-            var deltaX = point.x - this.firstPoint.x;
-            var deltaY = point.y - this.firstPoint.y;
-            var snap = this.snapTolerance;
             var offset;
-            if (snap > 0 && deltaX * deltaX + deltaY * deltaY >= 2*snap*snap) {
-                if (Math.abs(deltaY) < snap) {
+            const point = event.point;
+            const deltaX = point.x - this.firstPoint.x;
+            const deltaY = point.y - this.firstPoint.y;
+            const hypotenuse = Math.hypot(deltaX, deltaY);
+            const PI4 = Math.PI / 4;
+            const root2snap = Math.SQRT2 * this.snap;
+            if (root2snap < 0) {
+                const theta = Math.round(Math.atan2(deltaY, deltaX) / PI4)*PI4;
+                point.x = this.firstPoint.x + hypotenuse * Math.cos(theta);
+                point.y = this.firstPoint.y + hypotenuse * Math.sin(theta);
+            }
+            else if (root2snap > 0 && hypotenuse >= root2snap) {
+                if (Math.abs(deltaY) < this.snap) {
                     point.y = this.firstPoint.y;
                 }
-                else if (Math.abs(deltaX) < snap) {
+                else if (Math.abs(deltaX) < this.snap) {
                     point.x = this.firstPoint.x;
                 }
-                else if (Math.abs(deltaX - deltaY) < Math.sqrt(2)*snap) {
+                else if (Math.abs(deltaX - deltaY) < root2snap) {
                     offset = (deltaX + deltaY) / 2;
                     point.x = this.firstPoint.x + offset;
                     point.y = this.firstPoint.y + offset;
                 }
-                else if (Math.abs(deltaX + deltaY) < Math.sqrt(2)*snap) {
+                else if (Math.abs(deltaX + deltaY) < root2snap) {
                     offset = (deltaX - deltaY) / 2;
                     point.x = this.firstPoint.x + offset;
                     point.y = this.firstPoint.y - offset;
@@ -396,13 +407,12 @@ document.addEventListener("DOMContentLoaded", function() {
     // The rectangle tool: draw rectangles, optionally snap to squares
     class RectangleTool extends DrawingTool {
         constructor(button, notetaker) {
-            super(button, notetaker);
-            this.snapTolerance = 20; // Set to -1 to disable snap
-            this.firstPoint = null;
+            super(button, notetaker, {snap: 20});
         }
 
         rectangle(p1, p2) {
-            return [p1, new paper.Point(p1.x, p2.y), p2, new paper.Point(p2.x, p1.y)];
+            return [p1, new paper.Point(p1.x, p2.y), 
+                    p2, new paper.Point(p2.x, p1.y)];
         }
 
         onMouseDown(event) {
@@ -420,18 +430,29 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseDrag(event) {
-            var point = event.point;
-            var deltaX = point.x - this.firstPoint.x;
-            var deltaY = point.y - this.firstPoint.y;
-            var snap = this.snapTolerance;
             var offset;
-            if (snap > 0 && deltaX * deltaX + deltaY * deltaY >= 2*snap*snap) {
-                if (Math.abs(deltaX - deltaY) < Math.sqrt(2)*snap) {
+            const point = event.point;
+            const deltaX = point.x - this.firstPoint.x;
+            const deltaY = point.y - this.firstPoint.y;
+            const hypotenuse = Math.hypot(deltaX, deltaY);
+            const root2snap = Math.SQRT2 * this.snap;
+            if (root2snap < 0) {
+                if (Math.abs(deltaY) < Math.abs(deltaX)) {
+                    point.y = this.firstPoint.y + 
+                            (deltaY > 0 ? 1 : -1) * Math.abs(deltaX);
+                }
+                else {
+                    point.x = this.firstPoint.x + 
+                            (deltaX >= 0 ? 1 : -1) * Math.abs(deltaY);
+                }
+            }
+            else if (root2snap > 0 && hypotenuse >= root2snap) {
+                if (Math.abs(deltaX - deltaY) < root2snap) {
                     offset = (deltaX + deltaY) / 2;
                     point.x = this.firstPoint.x + offset;
                     point.y = this.firstPoint.y + offset;
                 }
-                else if (Math.abs(deltaX + deltaY) < Math.sqrt(2)*snap) {
+                else if (Math.abs(deltaX + deltaY) < root2snap) {
                     offset = (deltaX - deltaY) / 2;
                     point.x = this.firstPoint.x + offset;
                     point.y = this.firstPoint.y - offset;
@@ -449,9 +470,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // The ellipse tool: draw ellipses, from center, optionally snap to circles
     class EllipseTool extends DrawingTool {
         constructor(button, notetaker) {
-            super(button, notetaker);
-            this.snapTolerance = 20; // 0 disables snap, negative makes circles
-            this.center = null;
+            super(button, notetaker, {snap: 20});
         }
 
         onMouseDown(event) {
@@ -469,15 +488,15 @@ document.addEventListener("DOMContentLoaded", function() {
 
         onMouseDrag(event) {
             const point = event.point;
-            const snap = this.snapTolerance;
             var xradius = Math.abs(point.x - this.center.x);
             var yradius = Math.abs(point.y - this.center.y);
-            const hypotenuseSquared = xradius * xradius + yradius * yradius;
-            if (snap < 0) {
-                xradius = yradius = Math.sqrt(hypotenuseSquared);
+            const hypotenuse = Math.hypot(xradius, yradius);
+            const root2snap = Math.SQRT2 * this.snap;
+            if (root2snap < 0) {
+                xradius = yradius = hypotenuse;
             }
-            if (snap > 0 && hypotenuseSquared >= 2*snap*snap 
-               && Math.abs(xradius - yradius) < Math.sqrt(2)*snap) {
+            else if (root2snap > 0 && hypotenuse >= root2snap && 
+                    Math.abs(xradius - yradius) < root2snap) {
                 xradius = yradius = (xradius + yradius) / 2;
             }
             var newPath = new paper.Path.Ellipse({center: this.center, 
@@ -537,7 +556,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // The erase tool: cover up previously drawn ink, and also divide paths
     class EraseTool extends NotetakerTool {
         constructor(button, notetaker) {
-            super(button, notetaker, {width: 10});
+            super(button, notetaker, {width: 10, simplify: 2.5});
         }
 
         onMouseDown(event) {
@@ -559,36 +578,41 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseUp(event) {
-            var histItem, i, path;
-            this.currentPath.simplify(2.5);
-            histItem = [this.currentPath.index, this.currentPath];
+            var i, path, intersections;
+            if (this.simplify >= 0) {
+                this.currentPath.simplify(this.simplify);
+            }
+            const histItem = [this.currentPath.index, this.currentPath];
+            // Now split every other path that this erase-path intersects
             for(i = 0; path = this.notetaker.activeLayer.children[i]; i++) {
+                // Ignore other erase-paths
                 if (path.blendMode === "destination-out") {
                     continue;
                 }
-                let intersections = path.getIntersections(this.currentPath);
-                if (intersections.length) {
-                    let pathCopy = path.clone({insert: false, deep: false});
-                    intersections = pathCopy.getIntersections(this.currentPath);
-                    let newPaths = [];
-                    for(let intersection of intersections.reverse()) {
-                        let newPath = pathCopy.splitAt(intersection);
-                        if (newPath && newPath !== pathCopy) {
-                            newPaths.push(newPath);
-                        }
+                // Ignore paths that this erase-path doesn't intersect
+                intersections = path.getIntersections(this.currentPath);
+                if (intersections.length === 0) {
+                    continue;
+                }
+                const pathCopy = path.clone({insert: false, deep: false});
+                intersections = pathCopy.getIntersections(this.currentPath);
+                const newPaths = [];
+                for(const intersection of intersections.reverse()) {
+                    const newPath = pathCopy.splitAt(intersection);
+                    if (newPath && newPath !== pathCopy) {
+                        newPaths.push(newPath);
                     }
-                    if (newPaths.length || (path.closed && !pathCopy.closed)) {
-                        let index = path.index;
-                        histItem.push(-index - 1, path);
-                        path.remove();
-                        newPaths.push(pathCopy);
-                        newPaths.forEach((newPath, j) => {
-                            histItem.push(index + j, newPath);
-                        });
-                        this.notetaker.activeLayer.insertChildren(index, 
-                                newPaths);
-                        i = pathCopy.index;
-                    }
+                }
+                if (newPaths.length || (path.closed && !pathCopy.closed)) {
+                    const index = path.index;
+                    histItem.push(-index - 1, path);
+                    path.remove();
+                    newPaths.push(pathCopy);
+                    newPaths.forEach((newPath, j) => {
+                        histItem.push(index + j, newPath);
+                    });
+                    this.notetaker.activeLayer.insertChildren(index, newPaths);
+                    i = pathCopy.index;
                 }
             }
             this.notetaker.history.add(histItem);
@@ -705,6 +729,16 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
+    // click function for a toolButtonGroup. (Worth creating a whole subclass?) 
+    function toolButtonClick(event) {
+        var button = event.currentTarget;
+        if (this._selected !== button) {
+            this._selected._tool.deactivate();
+        }
+        this.select(button);
+        button._tool.activate();
+    }
+
     // WidgetGroup for a set of widgets that control a certain tool property
     class PropertyWidgetGroup extends WidgetGroup {
         constructor(property, notetaker, cssConverter) {
@@ -757,142 +791,6 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-
-    // Initialize the toolbar config. In production, will be imported/fetched. 
-    //const configuration = {
-    //    "theme": "default", // NOT YET IMPLEMENTED
-    //    "position": "top", // NOT YET IMPLEMENTED
-    //    "start": [
-    //        { "type": "width-button", "value": 1 }, 
-    //        { "type": "width-button*", "value": 2 }, 
-    //        { "type": "width-button", "value": 10 }, 
-    //        { "type": "opacity-button*", "value": 1 }, 
-    //        { "type": "opacity-button", "value": 0.7 }, 
-    //        { "type": "opacity-button", "value": 0.4 }, 
-    //        { "type": "dash-pattern-button*", "value": [] }, 
-    //        { "type": "dash-pattern-button", "value": [7, 3] }, 
-    //        { "type": "dash-pattern-button", "value": [7, 3, 1, 3] }, 
-    //        { "type": "color-button", "value": "dodgerblue" }, 
-    //        { "type": "color-button", "value": "darkred" }, 
-    //        { "type": "color-button", "value": "darkgreen" }, 
-    //        { "type": "color-button", "value": "darkgray" }, 
-    //        { "type": "color-button", "value": "darkorange" }, 
-    //        { "type": "color-button", "value": "purple" }, 
-    //        { "type": "color-button", "value": "cornflowerblue" }, 
-    //    ], 
-    //    "middle": [
-    //        { "type": "pen-tool", "color": "darkblue", "width": 3, "opacity": 1, "dash": [] }, 
-    //        { "type": "pen-tool", "color": "darkblue*", "width": "3*", "opacity": "1*", "dash": "[]*" }, 
-    //        { "type": "pen-tool", "color": "darkblue&", "width": "3&", "opacity": "1&", "dash": "[]&" }, 
-    //        { "type": "pen-tool", "color": "&", "width": "&", "opacity": "&", "dash": "&" }, 
-    //        { "type": "pen-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
-    //        { "type": "line-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
-    //        { "type": "rectangle-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
-    //        { "type": "ellipse-tool", "color": "*", "width": "*", "opacity": "*", "dash": "*" }, 
-    //        { "type": "delete-tool", "width": "*" }, 
-    //        { "type": "erase-tool", "width": "*" }, 
-    //        { "type": "pen-tool", "color": "lightgreen", "width": 16, "opacity": 0.4, "dash": [] }, 
-    //    ], 
-    //    "end": [
-    //        { "type": "undo" }, 
-    //        { "type": "redo" }, 
-    //        { "type": "laser-pointer-tool", "color": "red", "width": 10, "opacity": 0.6 }, 
-    //        { "type": "trailing-laser-tool*", "color": "red", "width": 10, "opacity": 0.6 }, 
-    //    ]
-    //};
-    const configuration = {
-        theme: "default", 
-        position: "top", 
-        start: [
-            { type: "dash-pattern-button*", value: "[]"     }, 
-            { type: "dash-pattern-button",  value: "[7, 3]" }, 
-            { type: "color-button*", value: "darkblue"      }, 
-            { type: "color-button",  value: "darkgreen"     }, 
-            { type: "color-button",  value: "darkred"       }, 
-            { type: "color-button",  value: "#404040"       }, 
-            { type: "color-button",  value: "darkorange"    }, 
-            { type: "color-button",  value: "blueviolet"    }, 
-        ], 
-        middle: [
-            { type: "pen-tool",       color: "*", width: 2, opacity: 1, dash: "[]*" }, 
-            { type: "line-tool",      color: "*", width: 2, opacity: 1, dash: "[]*" }, 
-            { type: "rectangle-tool", color: "*", width: 2, opacity: 1, dash: "[]*" }, 
-            { type: "ellipse-tool",   color: "*", width: 2, opacity: 1, dash: "[]*" }, 
-            { type: "pen-tool",       color: "lightgreen*", width: 16, opacity: 0.4, dash: "[]" }, 
-            { type: "delete-tool",    width: 3 }, 
-            { type: "erase-tool",     width: 10 }, 
-        ], 
-        end: [
-            { type: "undo" }, 
-            { type: "redo" }, 
-            { type: "trailing-laser-tool*", color: "red*", width: 10, opacity: 0.6 }, 
-            { type: "pass-through-tool" }, 
-        ], 
-    };
-
-    // Initialize the theme. In production, we'll do this via import or fetch. 
-    const theme = {
-        stylesheet: "\
-            :host { \n\
-                display: flex; \n\
-                flex-direction: column; \n\
-            } \n\
-            :host > div { \n\
-                pointer-events: auto; \n\
-                flex: none; \n\
-                height: 2em; \n\
-                display: flex; \n\
-                flex-direction: row; \n\
-                justify-content: space-between; \n\
-                background-color: dimgray; \n\
-            } \n\
-            :host > canvas { \n\
-                flex: auto; \n\
-            } \n\
-            .toolbar-section { \n\
-                flex: none; \n\
-                height: 2em; \n\
-            } \n\
-            button { \n\
-                font-size: 100%; \n\
-                width: 2em; \n\
-                height: 2em; \n\
-                border: none; \n\
-                margin: 0 0.1em; \n\
-                padding: 0; \n\
-            } \n\
-            button:disabled { \n\
-                filter: grayscale(100%); \n\
-            } \n\
-            button:disabled:hover { \n\
-                background-color: inherit; \n\
-            } \n\
-            button:focus { \n\
-                outline-offset: 0px; \n\
-            } \n\
-            button.selected { \n\
-                border: 1px solid red; \n\
-            } \n\
-            button:disabled.selected { \n\
-                border: none; \n\
-            }", 
-        "undo":                 '<svg viewBox="0 0 10 10"><path d="M4,8.5 A2.5,3.5 30 1,0 2.5,4.5 m-0.5,-1.5 l0.5,1.5 1.5,-0.5" fill="none" stroke="black" stroke-width="0.5" /></svg>', 
-        "redo":                 '<svg viewBox="0 0 10 10"><path d="M6,8.5 A2.5,3.5 -30 1,1 7.5,4.5 m0.5,-1.5 l-0.5,1.5 -1.5,-0.5" fill="none" stroke="black" stroke-width="0.5" /></svg>', 
-        "color-button":         '<svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1" ry="1" style="fill: var(--value); stroke: none;" /></svg>', 
-        "width-button":         '<svg viewBox="0 0 10 10"><path d="M5,5 5,5" style="fill: none; stroke: black; stroke-width: calc(var(--value) * 2px); stroke-linecap: round;" /></svg>', 
-        "opacity-button":       '<svg viewBox="0 0 10 10"><path d="M0,0 H2.5 V10 H5 V0 H7.5 V10 H10 V7.5 H0 V5 H10 V2.5 H0 z" style="fill: gray; stroke: none; opacity: 0.25;" /><circle cx="5" cy="5" r="4" style="fill: black; stroke:none; opacity: var(--value);" /></svg>', 
-        "dash-pattern-button":  '<svg viewBox="0 0 10 10"><path d="M5,0 V10" style="stroke: black; stroke-width: 0.5; stroke-dasharray: var(--value);" /></svg>', 
-        "pen-tool":             '<svg viewBox="0 0 10 10"><path d="M0,0 H2.5 V10 H5 V0 H7.5 V10 H10 V7.5 H0 V5 H10 V2.5 H0 z" style="fill: gray; stroke: none; opacity: 0.25;" /><path d="M0,10 S3,2 5,5 7,7 12,0" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
-        "line-tool":            '<svg viewBox="0 0 10 10"><path d="M0,0 H2.5 V10 H5 V0 H7.5 V10 H10 V7.5 H0 V5 H10 V2.5 H0 z" style="fill: gray; stroke: none; opacity: 0.25;" /><path d="M-3,10 L13,0" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
-        "rectangle-tool":       '<svg viewBox="0 0 10 10"><path d="M0,0 H2.5 V10 H5 V0 H7.5 V10 H10 V7.5 H0 V5 H10 V2.5 H0 z" style="fill: gray; stroke: none; opacity: 0.25;" /><path d="M1.5,2.5 l7,0 0,5 -7,0 z" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
-        "ellipse-tool":         '<svg viewBox="0 0 10 10"><path d="M0,0 H2.5 V10 H5 V0 H7.5 V10 H10 V7.5 H0 V5 H10 V2.5 H0 z" style="fill: gray; stroke: none; opacity: 0.25;" /><circle cx="5" cy="5" r="3" style="fill: none; stroke: var(--color); stroke-width: var(--width); opacity: var(--opacity); stroke-dasharray: var(--dash); stroke-linecap: butt;" /></svg>', 
-        "delete-tool":          '<svg viewBox="0 0 10 10"><path d="M1,2 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0 M1,8 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0" style="fill: none; stroke: black; stroke-width: 1; stroke-linecap: round;" /><path d="M1,5 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0" style="fill: none; stroke: black; stroke-width: 1; stroke-linecap: round; opacity: 0.3;" /><circle cx="8" cy="5.5" r="1.5" style="fill: gray; stroke: none;" /></svg>', 
-        "erase-tool":           '<svg viewBox="0 0 10 10"><path d="M1,2 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0 M1,5 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0 M1,8 q1,-2 2,0 1,2 2,0 1,-2 2,0 1,2 2,0" style="fill: none; stroke: black; stroke-width: 1; stroke-linecap: round;" /><path d="M10,0 3,7" style="fill: none; stroke: white; stroke-width: calc(var(--width) * 1.5px); stroke-linecap: round; opacity: 0.9;" /><path d="M3,7 3,7" style="fill: none; stroke: gray; stroke-width: calc(var(--width) * 1.5px); stroke-linecap: round;" /></svg>', 
-        "laser-pointer-tool":   '<svg viewBox="0 0 10 10"><path d="M5,5 5,5" style="fill: none; stroke: var(--color); stroke-width: calc(var(--width) * 1.5px); stroke-linecap: round; opacity: var(--opacity);" /><path d="M1.5,5 l-1.5,0 M8.5,5 l1.5,0 M6.75,8.031 l0.75,1.299 M3.25,8.031 l-0.75,1.299 M6.75,1.969 l0.75,-1.299 M3.25,1.969 l-0.75,-1.299" style="fill: none; stroke: var(--color); stroke-width: 0.5; stroke-linecap: round;" /></svg>', 
-        "trailing-laser-tool":  '<svg viewBox="0 0 10 10"><path d="M3,7 L7,3" style="fill: none; stroke: var(--color); stroke-width: calc(var(--width) * 1.5px); stroke-linecap: round; opacity: var(--opacity);" /><path d="M7,3 7,3"  style="fill: none; stroke: var(--color); stroke-width: calc(var(--width) * 1.5px); stroke-linecap: round; opacity: 1;" /></svg>', 
-        "pointer-tool":         '<svg viewBox="0 0 10 10"><path d="M8.7,7.5 l-3,1.5 -2,-2 a0.35,0.35 0 0,1 0.7,-0.7 l0.8,0.8 -1.8,-3.6 a0.35,0.35 0 0,1 0.885,-0.443 l1.2,2.4 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.4,0.8 s0.4,0.8 0.4,1.6 z" style="fill: none; stroke: black; stroke-width: 0.3; stroke-linejoin: round;" /><path d="M3.6,3 m-1.3,0 -1,0 M3.6,3 m0,-1.3 0,-1 M3.6,3 m-0.919,-0.919 -0.707,-0.707 M3.6,3 m-0.919,0.919 -0.707,0.707 M3.6,3 m0.919,-0.919 0.707,-0.707" style="fill: none; stroke: gray; stroke-width: 0.5; stroke-linecap: round;" /></svg>', 
-        "pass-through-tool":    '<svg viewBox="0 0 10 10"><path d="M8.7,7.5 l-3,1.5 -2,-2 a0.35,0.35 0 0,1 0.7,-0.7 l0.8,0.8 -1.8,-3.6 a0.35,0.35 0 0,1 0.885,-0.443 l1.2,2.4 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.6,1.2 -0.5,-1 a0.35,0.35 0 0,1 0.885,-0.443 l0.4,0.8 s0.4,0.8 0.4,1.6 z" style="fill: none; stroke: black; stroke-width: 0.3; stroke-linejoin: round;" /><path d="M3.6,3 m-1.3,0 -1,0 M3.6,3 m0,-1.3 0,-1 M3.6,3 m-0.919,-0.919 -0.707,-0.707 M3.6,3 m-0.919,0.919 -0.707,0.707 M3.6,3 m0.919,-0.919 0.707,-0.707" style="fill: none; stroke: gray; stroke-width: 0.5; stroke-linecap: round;" /></svg>', 
-    };
 
     // Our registry of all the various tools and other widgets. 
     const widgetTypes = {
@@ -976,24 +874,62 @@ document.addEventListener("DOMContentLoaded", function() {
                 return;
             }
             this._initialized = true;
-            var widget;
-            // Fetch both the configuration and the theme JSON data
-            //const configUrl = this.dataset["config-href"];
-            //if (!configUrl) {
-            //    throw new ReferenceError("note-taker: No config specified");
-            //}
-            //document.fetch(configUrl).then(this.gotConfig.bind(this));
+            const configUrl = this.getAttribute("config-href");
+            const themeUrl = this.getAttribute("theme-href");
+            this.loadConfigAndThemeAndSetupDom(configUrl, themeUrl)
+                .then(canvas => this.setupComponent(canvas))
+                .catch(error => { console.error(error); });
+        }
+
+        // Fetch both the configuration and the theme JSON data, if necessary, 
+        // and apply them to the DOM. This async method returns the canvas. 
+        async loadConfigAndThemeAndSetupDom(configUrl, themeUrl) {
+            var response;
+            if (!configUrl && !configuration) {
+                throw new ReferenceError("note-taker: No config specified");
+            }
+            if (!configuration || 
+                    (configUrl && configUrl !== configuration.configUrl)) {
+                try {
+                    response = await window.fetch(configUrl);
+                    configuration = await response.json();
+                    configuration.configUrl = configUrl;
+                }
+                catch(error) {
+                    console.log("Error fetching configuration");
+                    throw error;
+                }
+            }
+            if (!theme && !themeUrl) {
+                themeUrl = configuration.theme;
+            }
+            if (!theme || (themeUrl && themeUrl !== theme.themeUrl)) {
+                try {
+                    response = await window.fetch(themeUrl);
+                    theme = await response.json();
+                    theme.themeUrl = themeUrl;
+                }
+                catch(error) {
+                    console.log("Error fetching theme");
+                    throw error;
+                }
+            }
+            // Set the toolbar position as an attribute, if not already set
+            const positions = ["top", "bottom", "left", "right"];
+            if (!positions.includes(this.getAttribute("toolbar"))) {
+                this.setAttribute("toolbar", configuration.position || "top");
+            }
             // Set up an inner style sheet, in the Shadow DOM
             //     Note: We may eventually allow for <link> stylesheets as well
             const style = document.createElement("style");
             style.textContent = theme.stylesheet;
-            // Now create the toolbar, and populate it (using the configuration object)
+            // Now create the toolbar, and populate it
             this.toolbar = document.createElement("div");
             for (const part of ["start", "middle", "end"]) {
                 const toolbar_part = document.createElement("div");
                 toolbar_part.className = "toolbar_section";
                 if (part in configuration) {
-                    for (widget of configuration[part]) {
+                    for (let widget of configuration[part]) {
                         let {type, ...attributes} = widget;
                         let selected = type.endsWith("*");
                         type = selected ? type.slice(0, -1) : type;
@@ -1006,7 +942,10 @@ document.addEventListener("DOMContentLoaded", function() {
             const canvas = document.createElement("canvas");
             this.attachShadow({mode: "open"});
             this.shadowRoot.append(style, this.toolbar, canvas);
+            return canvas;
+        }
 
+        setupComponent(canvas) {
             // Now that we've got our canvas, we can set up PaperJS
             paper.setup(canvas);                    // Note this must be done 
             this.activeLayer = new paper.Layer();   // before instantiating the 
@@ -1030,17 +969,10 @@ document.addEventListener("DOMContentLoaded", function() {
 
             // ...and the tool buttons. 
             this.toolButtons = new WidgetGroup();
-            this.toolButtons.click = function(event) {
-                var button = event.currentTarget;
-                if (this._selected !== button) {
-                    this._selected._tool.deactivate();
-                }
-                this.select(button);
-                button._tool.activate();
-            };
+            this.toolButtons.click = toolButtonClick.bind(this.toolButtons);
 
-            // Finally we set up/configure the controllers for all those widgets
-            for (widget of this.toolbar.querySelectorAll("button, input")) {
+            // Then we construct/configure the controllers for all those widgets
+            for (let widget of this.toolbar.querySelectorAll("button, input")) {
                 let widgetInfo = widgetTypes[widget.dataset.type];
                 switch(widgetInfo.type) {
                     case "property":
@@ -1057,7 +989,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 }
             }
 
-            // Set up the history, and activate our first tool! 
+            // Finally, set up the history, and activate our first tool! 
             this.history = new History(this);
             this.toolButtons.selected._tool.activate();
             paper.view.draw();
