@@ -34,6 +34,9 @@
     :host > canvas {
         flex: auto;
     }
+    :host.hidden > canvas {
+        visibility: hidden;
+    }
     .toolbar-section {
         flex: none;
         height: 2em;

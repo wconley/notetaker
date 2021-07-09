@@ -38,34 +38,27 @@ Idea: To keep the configuration language simple, just use a certain character (l
     - Not specifying this property at all means that the value gets the default for that tool. Most likely, for the color for all of the drawing tools, this should be `"&"`, and for all other properties of all tools this should be a fixed value as in (a) above. 
 This can be done similarly for colors, which could be specified as `"#6495ED"` or `"cornflowerblue",` or in order to be variable by a color tool: `"#6495ED*"` or `"cornflowerblue*",` or `"#6495ED&"` or `"cornflowerblue&"`. 
 
-Class hierarchy: 
-    NotetakerToolbarItem
-        NotetakerUndoButton
-        NotetakerRedoButton
-        NotetakerColorButton (C)
-        NotetakerColorPicker (C)
-        NotetakerWidthButton (W)
-        NotetakerWidthSlider (W)
-        NotetakerOpacityButton (O)
-        NotetakerOpacitySlider (O)
-        NotetakerDashPatternButton (D)
-        NotetakerDrawingTool                  (M)
-            NotetakerPenTool                  (M)
-            NotetakerLineTool                 (M)
-            NotetakerRectangleTool            (M)
-            NotetakerCircleTool               (M)
-            NotetakerBracketTool              (M)
-            NotetakerEraserTool               (M)
-            NotetakerDeleteTool               (M)
-            NotetakerLaserPointerTool         (M)
-            NotetakerTrailingLaserPointerTool (M)
-        NotetakerPointerTool                  (M)
-        NotetakerPassThruTool                 (M)
+To facilitate having multiple canvases, plus the ability to have a single toolbar that can control more than one canvas, here's what we need to do: 
+    - Toolbar class: 
+        - Encapsulates a paper.PaperScope. All tools created for this toolbar should be created in that PaperScope, so it's important to call PaperScope.activate() before constructing the paper.Tool. (Currently this happens in the activate method of the NotetakerTool, but it could probably be done in the constructor if we modify a few things. This would probably be more sensible.) 
+        - Maintains a (Weak?)Map of DOM canvas objects to paper.Project-s for the canvases/projects that it controls. This is necessary for paper.Tool event handlers to work correctly. 
+        - Also keeps track, somehow, of which of its canvases/projects is the “active” one, and provides methods for changing that. 
+            - Note that the paper.PaperScope keeps a reference to which of *its* paper.Project-s is active. 
+            - Could we just use this mechanism? 
+            - If so, we would either have to maintain a Map from paper.Project objects to Notetaker objects, or we would have to attach a reference to our Notetaker object directly to the paper.Project. 
+            - The latter (monkey-patching, essentially) is more risky/frowned-upon. 
+            - Or, of course, we could maintain our own reference to which Notetaker object is active, and method(s) for activating one. 
+        - Is constructed by querying the DOM for buttons/inputs with appropriate attributes set. Takes over managing the state of those elements, but otherwise doesn't do any significant DOM manipulation. 
+    - Custom element <notetaker-toolbar>: Takes a config-url (and optionally a theme-url) as attributes, loads them if necessary, and builds/styles the corresponding toolbar in its shadow-DOM. Then also constructs a Toolbar object (passing itself to the constructor) to control it. 
+    - Notetaker class/web component (custom element <note-taker>): 
+        - Encapsulates a paper.Project, within the paper.PaperScope of the Toolbar that controls it. 
+        - Also encapsulates its own History object, corresponding to that paper.Project. 
+            - The undo and redo buttons of a Toolbar must operate on the History object of the toolbar's *active* Notetaker object. 
+            - This also means that when a different Notetaker is activated, we have to update the status of the undo and redo buttons of the toolbar, to reflect whether they are disabled or not. 
+            - So the history object no longer controls the undo/redo buttons! 
+            - Instead, the history must simply maintain state about whether undo/redo should be disabled/enabled. The Toolbar will query that state when it needs to. 
+    - There should be a module-global Map, called toolbars, that maps DOM elements (or element IDs) to Toolbar objects. 
+        - The reason this is needed is that a toolbar element can be one of our <notetaker-toolbar> custom elements, *or* it can be built by the user in HTML. In the latter case, if multiple <note-taker>s are to use the same toolbar, we need to ensure that they use the same Toolbar object. 
+        - For a <note-taker> with its own built-in toolbar, this is unnecessary, as its toolbar can't be shared with another <note-taker>. 
 
-Note that there are five categories of buttons (C, W, O, D, M) that function as 
-radio buttons, and within each of these categories, the buttons mutually exclude 
-each other. Probably the easiest way to handle this is to have a variable for 
-each group that points to which button of the group is currently selected. Or, 
-slightly fancier (but still simple, and possibly better for other purposes) have 
-a class that represents a button group, and have five objects of this class. 
 

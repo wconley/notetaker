@@ -3,6 +3,7 @@
 document.addEventListener("DOMContentLoaded", function() {
     "use strict";
     var theme = null, configuration = null;
+    const paperProjects = new Map();
 
     // A function for logging error/warning messages, but turned off by default
     function log(message) {
@@ -51,8 +52,8 @@ document.addEventListener("DOMContentLoaded", function() {
             this.history = [];
             this.position = 0;
             this.activeLayer = notetaker.activeLayer;
-            this.undoButtons = notetaker.toolbar.querySelectorAll('button[data-type="undo"]');
-            this.redoButtons = notetaker.toolbar.querySelectorAll('button[data-type="redo"]');
+            this.undoButtons = notetaker.toolbar.querySelectorAll('button[data-type="notetaker-undo"]');
+            this.redoButtons = notetaker.toolbar.querySelectorAll('button[data-type="notetaker-redo"]');
             this.undoDisabled = true;
             this.redoDisabled = true;
             for (button of this.undoButtons) {
@@ -810,53 +811,40 @@ document.addEventListener("DOMContentLoaded", function() {
         "trailing-laser-tool":  { element: "button", type: "tool", controller: TrailingLaserTool }, 
         "pointer-tool":         { element: "button", type: "tool", controller: LaserPointerTool }, // To be implemented...
         "pass-through-tool":    { element: "button", type: "tool", controller: PassthroughTool }, 
-    }
-
-    class NotetakerButton extends HTMLButtonElement {
-        constructor() {
-            super();
-        }
-
-        connectedCallback() {
-            if (this._initialized) {
-                return;
-            }
-            this._initialized = true;
-            if (!("type" in this.dataset)) {
-                throw new TypeError("notetaker-button has no 'type' specified");
-            }
-            const type = this.dataset.type;
-            if (!(type in widgetTypes)) {
-                throw new TypeError(`notetaker-button has unknown type ${type}`);
-            }
-            if (widgetTypes[type].type === "property" && 
-                !("value" in this.dataset)) {
-                log(`WARNING: ${type} created with no value specified.`);
-                return;
-            }
-            if (!(type in theme)) {
-                log(`WARNING: ${type} is not in this theme.`);
-                return;
-            }
-            this.innerHTML = theme[type];
-        }
-    }
+    };
 
     function createWidget(type, attributes, selected) {
         if (!(type in widgetTypes)) {
             log(`WARNING: Tried to create a widget of unknown type "${type}".`);
             return;
         }
-        const widget = document.createElement(widgetTypes[type].element, 
-                {is: `notetaker-${widgetTypes[type].element}`});
-        widget.dataset.type = type;
+        const widget = document.createElement(widgetTypes[type].element);
+        widget.dataset.type = `notetaker-${type}`;
         for (var [attribute, value] of Object.entries(attributes)) {
             widget.dataset[attribute] = attributeEncode(value);
         }
         if (selected) {
             widget.className = "selected";
         }
+        styleWidget(widget);
         return widget;
+    }
+
+    function styleWidget(widget) {
+        const type = widget.dataset.type.slice(10); // Cut leading "notetaker-"
+        if (!(type in widgetTypes)) {
+            throw new TypeError(`Notetaker widget has unknown type ${type}`);
+        }
+        if (widgetTypes[type].type === "property" && 
+                !("value" in widget.dataset)) {
+            log(`WARNING: ${type} created with no value specified.`);
+            return;
+        }
+        if (!(type in theme)) {
+            log(`WARNING: ${type} is not in this theme.`);
+            return;
+        }
+        widget.innerHTML = theme[type];
     }
 
     class Notetaker extends HTMLElement {
@@ -939,6 +927,11 @@ document.addEventListener("DOMContentLoaded", function() {
                 }
                 this.toolbar.appendChild(toolbar_part);
             }
+            if (false) { // Placeholder for eventually using HTML toolbar
+                for (widget of toolbar.querySelectorAll("button[data-type^='notetaker-']")) {
+                    styleWidget(widget);
+                }
+            }
             const canvas = document.createElement("canvas");
             this.attachShadow({mode: "open"});
             this.shadowRoot.append(style, this.toolbar, canvas);
@@ -947,6 +940,13 @@ document.addEventListener("DOMContentLoaded", function() {
 
         setupComponent(canvas) {
             // Now that we've got our canvas, we can set up PaperJS
+            const project = new paper.Project(canvas);
+            project.activate(); // I DON'T THINK THIS IS NECESSARY...
+            paperProjects.set(canvas, project);
+            this.activeLayer = project.activeLayer;
+            this.pointerLayer = new paper.Layer();
+            this.activeLayer.activate();
+
             paper.setup(canvas);                    // Note this must be done 
             this.activeLayer = new paper.Layer();   // before instantiating the 
             this.pointerLayer = new paper.Layer();  // tools, as some of them 
@@ -973,7 +973,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
             // Then we construct/configure the controllers for all those widgets
             for (let widget of this.toolbar.querySelectorAll("button, input")) {
-                let widgetInfo = widgetTypes[widget.dataset.type];
+                let widgetInfo = widgetTypes[widget.dataset.type.slice(10)];
                 switch(widgetInfo.type) {
                     case "property":
                         let propertyGroup = this.properties[widgetInfo.property];
@@ -992,12 +992,11 @@ document.addEventListener("DOMContentLoaded", function() {
             // Finally, set up the history, and activate our first tool! 
             this.history = new History(this);
             this.toolButtons.selected._tool.activate();
-            paper.view.draw();
+            //paper.view.draw();
         }
     }
 
-    // Define our two custom elements. 
-    customElements.define("notetaker-button", NotetakerButton, {extends: "button"});
+    // Define our custom element! 
     customElements.define("note-taker", Notetaker);
 });
 

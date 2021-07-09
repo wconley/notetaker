@@ -1,26 +1,4 @@
-/*@font-face {*/
-    /*font-family: 'MathJax_Main';*/
-    /*src: url('https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2/MathJax_Main-Regular.woff') format('woff');*/
-    /*font-weight: normal;*/
-    /*font-style: normal;*/
-    /*[>ascent-override: 1000%;<]*/
-/*}*/
-
-/*@font-face {*/
-    /*font-family: 'MathJax_Main';*/
-    /*src: url('https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2/MathJax_Main-Bold.woff') format('woff');*/
-    /*font-weight: bold;*/
-    /*font-style: normal;*/
-/*}*/
-
-/*@font-face {*/
-    /*font-family: 'MathJax_Main';*/
-    /*src: url('https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2/MathJax_Main-Italic.woff') format('woff');*/
-    /*font-weight: normal;*/
-    /*font-style: italic;*/
-/*}*/
-
-#main_content {
+.pagecontent {
     --definition-color: red;
     width: 40em;
     margin: 3em auto 0 auto;
@@ -34,6 +12,10 @@ span.define {
     color: var(--definition-color);
 }
 
+#plotly_plot {
+    width: 40em;
+    height: 700px;
+}
 
 /* Our custom note-taker element. Now, all other styling of this element and its 
  * contents is internal to this component, in its shadow DOM. Note that we still 

@@ -23,7 +23,7 @@
   end: [
     { type: "undo" }, 
     { type: "redo" }, 
-    { type: "trailing-laser-tool*", color: "red*", width: 10, opacity: 0.6 }, 
-    { type: "pass-through-tool" }, 
+    { type: "trailing-laser-tool", color: "red*", width: 10, opacity: 0.6 }, 
+    { type: "pass-through-tool*" }, 
   ], 
 }

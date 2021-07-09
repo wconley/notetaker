@@ -1,116 +1,61 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<link rel="stylesheet" href="notetaker_test.css">
-<script src="https://unpkg.com/@ungap/custom-elements/es.js"></script> <!-- Polyfill for Safari, to make customized built-in elements work -->
-<script>
-    window.MathJax = {
-        chtml: {
-            //scale: 1,               // global scaling factor for all expressions
-            //minScale: .5,           // smallest scaling factor to use
-            matchFontHeight: true, // true to match ex-height of surrounding font
-        }, 
-        tex: {
-            inlineMath: [["$", "$"], ["\\(", "\\)"]], 
-            macros: {
-                RR: "\\mathbb{R}", 
-            }, 
-        }, 
-    };
-</script>
-<script id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-<script src="https://cdn.plot.ly/plotly-2.1.0.min.js"></script>
-<script src="paper-full.js"></script>
-<script>window.NOTETAKER_DEBUG = true;</script>
-<script src="notetaker.js"></script>
+  <meta charset="utf-8">
+  <title>Test page for the Notetaker component</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="notetaker_test.css">
+  <script src="https://cdn.plot.ly/plotly-2.1.0.min.js"></script>
+  <script src="paper-full.js"></script>
+  <script>window.NOTETAKER_DEBUG = true;</script>
+  <script src="notetaker.js"></script>
 </head>
 <body>
-  <div id="main_content">
-    <h1>The Frenet–Serret formulas</h1>
-    <p>
-    Let $\vec{r}: \RR \to \RR^3$ be a curve in Euclidean $3$-space, with an arclength parameter $s$, and let $\vec{T}$, $\vec{N}$, and $\vec{B}$ represent the <em>unit tangent vector</em>, the <em>principal unit normal vector</em>, and the <em>binormal vector</em> of $\vec{r}$, respectively. Together, these three mutually orthogonal unit vectors make up the <span class="define">Frenet frame</span> of the curve at any point. Their derivatives (with respect to arclength, $s$) satisfy the following equations: 
-    <!--
-    \[ \begin{aligned}
-        \frac{d\vec{T}}{ds} = \kappa \vec{N} \\
-        \frac{d\vec{N}}{ds} = -\kappa \vec{T} + \tau \vec{B} \\
-        \frac{d\vec{B}}{ds} = -\tau \vec{N}
-    \end{aligned} \]
-    where $\kappa$ is the <em>curvature</em> of the curve, and $\tau$ is its <em>torsion</em>. 
-    </p>
-    <p>
-    Just to test: cos $\cos$ <em>xyz</em> $xyz$
-    -->
-    </p>
+  <div class="pagecontent">
+    <h1>A 3D graph in Plotly</h1>
     <div id="plotly_plot"></div>
   </div>
-  <note-taker config-href="config/testing.json"></note-taker>
-  <!--
-  <div id="notetaker">
-    <div id="notetaker_toolbar">
-      <div id="notetaker_toolbar_start">
-        <button is="notetaker-button" data-type="width-button" data-value="1"></button>
-        <button is="notetaker-button" data-type="width-button" data-value="2" class="selected"></button>
-        <button is="notetaker-button" data-type="width-button" data-value="10"></button>
-        <button is="notetaker-button" data-type="opacity-button" data-value="1"></button>
-        <button is="notetaker-button" data-type="opacity-button" data-value="0.7"></button>
-        <button is="notetaker-button" data-type="opacity-button" data-value="0.4"></button>
-        <button is="notetaker-button" data-type="dash-pattern-button" data-value="[]"></button>
-        <button is="notetaker-button" data-type="dash-pattern-button" data-value="[7, 3]"></button>
-        <button is="notetaker-button" data-type="dash-pattern-button" data-value="[7, 3, 1, 3]"></button>
-        <button is="notetaker-button" data-type="color-button" data-value="dodgerblue"></button>
-        <button is="notetaker-button" data-type="color-button" data-value="darkred"></button>
-        <button is="notetaker-button" data-type="color-button" data-value="darkgreen"></button>
-        <button is="notetaker-button" data-type="color-button" data-value="darkgray"></button>
-        <button is="notetaker-button" data-type="color-button" data-value="darkorange"></button>
-        <button is="notetaker-button" data-type="color-button" data-value="purple"></button>
-        <button is="notetaker-button" data-type="color-button" data-value="cornflowerblue"></button>
-      </div>
-      <div id="notetaker_toolbar_middle">
-        <button is="notetaker-button" data-type="pen-tool" data-color="darkblue" data-width="3" data-opacity="1" data-dash="[]"></button>
-        <button is="notetaker-button" data-type="pen-tool" data-color="darkblue*" data-width="3*" data-opacity="1*" data-dash="[]*"></button>
-        <button is="notetaker-button" data-type="pen-tool" data-color="darkblue&" data-width="3&" data-opacity="1&" data-dash="[]&"></button>
-        <button is="notetaker-button" data-type="pen-tool" data-color="&" data-width="&" data-opacity="&" data-dash="&"></button>
-        <button is="notetaker-button" data-type="pen-tool" data-color="*" data-width="*" data-opacity="*" data-dash="*"></button>
-        <button is="notetaker-button" data-type="line-tool" data-color="*" data-width="*" data-opacity="*" data-dash="*"></button>
-        <button is="notetaker-button" data-type="rectangle-tool" data-color="*" data-width="*" data-opacity="*" data-dash="*"></button>
-        <button is="notetaker-button" data-type="ellipse-tool" data-color="*" data-width="*" data-opacity="*" data-dash="*"></button>
-        <button is="notetaker-button" data-type="delete-tool" data-width="*"></button>
-        <button is="notetaker-button" data-type="erase-tool" data-width="*"></button>
-        <button is="notetaker-button" data-type="pen-tool" data-color="lightgreen" data-width="16" data-opacity="0.4" data-dash="[]"></button>
-      </div>
-      <div id="notetaker_toolbar_end">
-        <button is="notetaker-button" data-type="undo"></button>
-        <button is="notetaker-button" data-type="redo"></button>
-        <button is="notetaker-button" data-type="laser-pointer-tool" data-color="red" data-width="10" data-opacity="0.6"></button>
-        <button is="notetaker-button" data-type="trailing-laser-tool" data-color="red" data-width="10" data-opacity="0.6" class="selected"></button>
-      </div>
-    </div>
-    <canvas id="notetaker_canvas"></canvas>
-  </div>
-  -->
+  <note-taker config-href="config/efficient.json"></note-taker>
   <script>
     document.addEventListener("DOMContentLoaded", function() {
-      var data = [{
-        x: [1999, 2000, 2001, 2002],
-        y: [10, 15, 13, 17],
-        type: 'scatter'
-      }];
-
-      var layout = {
-        title: 'Sales Growth',
-        xaxis: {
-          title: 'Year',
-          showgrid: false,
-          zeroline: false
-        },
-        yaxis: {
-          title: 'Percent',
-          showline: false
+        const R = 3, r = 1;
+        const x = [], y = [], z = [];
+        for (u = 0; u <= 2.01*Math.PI; u += Math.PI/40) {
+            let thisx = [], thisy = [], thisz = [];
+            for (v = 0; v <= 2.01*Math.PI; v += Math.PI/40) {
+                thisx.push((R + r*Math.cos(v))*Math.cos(u));
+                thisy.push((R + r*Math.cos(v))*Math.sin(u));
+                thisz.push(r*Math.sin(v));
+            }
+            x.push(thisx);
+            y.push(thisy);
+            z.push(thisz);
         }
-      };
-      Plotly.newPlot(plotly_plot, data, layout);
+        const data = [{
+            x: x, 
+            y: y, 
+            z: z, 
+            type: 'surface', 
+            colorscale: [[0, "cornflowerblue"], [1, "cornflowerblue"]], 
+            showscale: false, 
+            contours: {
+                x: {highlight: false}, 
+                y: {highlight: false}, 
+                z: {highlight: false}, 
+            }, 
+            hoverinfo: "skip", 
+        }];
+        const layout = {
+            width: 700, 
+            height: 700, 
+            margin: {l: 20, r: 20, t: 40, b: 20}, 
+            scene: {
+                xaxis: {showspikes: false}, 
+                yaxis: {showspikes: false}, 
+                zaxis: {showspikes: false}, 
+            }, 
+        };
+        Plotly.newPlot(plotly_plot, data, layout);
     });
   </script>
 </body>
