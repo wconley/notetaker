@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Test page for the Notetaker component</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="notetaker_multitest.css">
+  <link rel="stylesheet" href="theme/default.css">
+  <script src="https://cdn.plot.ly/plotly-2.1.0.min.js"></script>
+  <script src="paper-full.js"></script>
+  <script src="notetaker.js"></script>
+</head>
+<body>
+  <notetaker-toolbar id="toolbar1" config-url="config/testing.json"></notetaker-toolbar>
+
+  <div id="main_grid_layout">
+    <div class="pagecontent">
+      <note-taker toolbar-id="toolbar1" id="nt1"></note-taker>
+      <p>These two Notetakers both use a <em>detached</em> toolbar...</p>
+      <div id="plotly_plot1" class="plotly_plot"></div>
+    </div>
+
+    <div class="pagecontent">
+      <note-taker toolbar-id="toolbar1" id="nt2"></note-taker>
+      <p>...in fact, they <em>both</em> use the toolbar at the top of the page.</p>
+      <div id="plotly_plot2" class="plotly_plot"></div>
+    </div>
+
+    <div class="pagecontent">
+      <note-taker config-url="config/efficient.json" toolbar="bottom" id="nt3"></note-taker>
+      <p>This Notetaker uses an attached toolbar, at the bottom</p>
+      <div id="plotly_plot3" class="plotly_plot"></div>
+    </div>
+
+    <div class="pagecontent" id="toolbar2" data-notetaker-theme-url="theme/default.json">
+      <note-taker toolbar-id="toolbar2" id="nt4"></note-taker>
+      <p>This Notetaker uses a <em>custom</em> toolbar layout, meaning that the 
+      page author designed the layout using HTML and CSS. This is also a type of 
+      detached toolbar, so it could be shared by multiple Notetakers.</p>
+      <label>Number input: <input type="number" value="6" min="0" max="10" step="1"></label><br>
+      <label>Text input:   <input type="text" value="some text" length="16"></label><br>
+      <textarea style="width: 30em; height: 10em;">You can type anything you want here. </textarea>
+      <div id="toolbar2_left">
+        <button data-notetaker-type="color-button" data-value="red"></button>
+        <button data-notetaker-type="color-button" data-value="orange"></button>
+        <button data-notetaker-type="color-button" data-value="yellow"></button>
+        <button data-notetaker-type="color-button" data-value="green"></button>
+        <button data-notetaker-type="color-button" data-value="blue"></button>
+        <button data-notetaker-type="color-button" data-value="violet"></button>
+        <button data-notetaker-type="color-button" data-value="black"></button>
+        <button data-notetaker-type="color-button" data-value="white"></button>
+      </div>
+      <div id="toolbar2_topright">
+        <button data-notetaker-type="pen-tool" data-color="black&" data-width="2*" data-opacity="1" data-dash="[]*"></button>
+        <button data-notetaker-type="delete-tool" data-width="3"></button>
+        <button data-notetaker-type="erase-tool" data-width="12"></button>
+        <button data-notetaker-type="trailing-laser-tool" data-color="red" data-width="10" data-opacity="0.6"></button>
+        <button data-notetaker-type="undo"></button>
+        <button data-notetaker-type="redo"></button>
+        <button data-notetaker-type="pass-through-tool" class="selected"></button>
+      </div>
+      <div id="toolbar2_bottomright">
+        <button data-notetaker-type="width-button" data-value="1"></button>
+        <button data-notetaker-type="width-button" data-value="3"></button>
+        <button data-notetaker-type="dash-pattern-button" data-value="[]"></button>
+        <button data-notetaker-type="dash-pattern-button" data-value="[7, 3]"></button>
+        <button data-notetaker-type="undo"></button>
+        <button data-notetaker-type="redo"></button>
+        <button data-notetaker-type="pass-through-tool"></button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+        function parametric_surface(f, urange, vrange) {
+            const x_array = [], y_array = [], z_array = [];
+            const [umin, umax, ustep] = urange;
+            const [vmin, vmax, vstep] = vrange;
+            for (let u = umin; u <= umax; u += ustep) {
+                let x_row = [], y_row = [], z_row = [];
+                for (let v = vmin; v <= vmax; v += vstep) {
+                    let [x, y, z] = f(u, v);
+                    x_row.push(x);
+                    y_row.push(y);
+                    z_row.push(z);
+                }
+                x_array.push(x_row);
+                y_array.push(y_row);
+                z_array.push(z_row);
+            }
+            const data = [{
+                x: x_array, 
+                y: y_array, 
+                z: z_array, 
+                type: 'surface', 
+                colorscale: [[0, "cornflowerblue"], [1, "cornflowerblue"]], 
+                showscale: false, 
+                contours: {
+                    x: {highlight: false}, 
+                    y: {highlight: false}, 
+                    z: {highlight: false}, 
+                }, 
+                hoverinfo: "skip", 
+            }];
+            return data;
+        }
+        const layout = {
+            width: 300, 
+            height: 300, 
+            margin: {l: 20, r: 20, t: 40, b: 20}, 
+            scene: {
+                xaxis: {showspikes: false}, 
+                yaxis: {showspikes: false}, 
+                zaxis: {showspikes: false}, 
+            }, 
+        };
+
+        const R = 3, r = 1;
+        const torus = (u, v) => [
+            (R + r * Math.cos(v)) * Math.cos(u), 
+            (R + r * Math.cos(v)) * Math.sin(u), 
+            r * Math.sin(v), 
+        ];
+        Plotly.newPlot("plotly_plot1", parametric_surface(torus, [0, 2.01*Math.PI, Math.PI/40], [0, 2.01*Math.PI, Math.PI/40]), layout);
+
+        const paraboloid = (u, v) => [
+            u * Math.cos(v), 
+            u * Math.sin(v), 
+            u ** 2, 
+        ];
+        Plotly.newPlot("plotly_plot2", parametric_surface(paraboloid, [0, 2, 0.05], [0, 2.01*Math.PI, Math.PI/40]), layout);
+
+        const ellipsoid = (u, v) => [
+            1 * Math.cos(u) * Math.sin(v), 
+            2 * Math.sin(u) * Math.sin(v), 
+            4 * Math.cos(v), 
+        ];
+        Plotly.newPlot("plotly_plot3", parametric_surface(ellipsoid, [0, 2.01*Math.PI, Math.PI/40], [0, 1.01*Math.PI, Math.PI/40]), layout);
+    });
+  </script>
+</body>
+</html>
+

@@ -2,17 +2,17 @@
 
 document.addEventListener("DOMContentLoaded", function() {
     "use strict";
-    var theme = null, configuration = null;
-    const paperProjects = new Map();
-
-    // A function for logging error/warning messages, but turned off by default
-    function log(message) {
-        if (window.NOTETAKER_DEBUG) {
-            console.log(message);
+    //var theme = null, configuration = null;
+    const toolbarControllers = new Proxy(new Map(), {
+        get: (map, id) => {
+            if (!map.has(id)) {
+                map.set(id, new ToolbarController(id));
+            }
+            return map.get(id);
         }
-    }
+    });
 
-    // A simple utility for creating enums. Not a constructor! Don't do new Enum
+    // A simple way to creating enums. Not a constructor! Don't do new Enum. 
     function Enum(items) {
         var myenum = {};
         for (var item of items) {
@@ -31,7 +31,7 @@ document.addEventListener("DOMContentLoaded", function() {
         return Object.freeze(new Proxy(myenum, handler));
     }
 
-    // Two simple helper functions for stringify-ing/parsing various attributes
+    // Two simple helper functions for stringify-ing/parsing various attributes. 
     function attributeEncode(value) {
         return typeof value === "string" ? value : JSON.stringify(value) ;
     }
@@ -44,114 +44,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-
-    // A class for keeping track of history, for undo/redo (singleton, actually)
-    class History {
-        constructor(notetaker) {
-            var button;
-            this.history = [];
-            this.position = 0;
-            this.activeLayer = notetaker.activeLayer;
-            this.undoButtons = notetaker.toolbar.querySelectorAll('button[data-type="notetaker-undo"]');
-            this.redoButtons = notetaker.toolbar.querySelectorAll('button[data-type="notetaker-redo"]');
-            this.undoDisabled = true;
-            this.redoDisabled = true;
-            for (button of this.undoButtons) {
-                button.addEventListener("click", this.undo.bind(this), false);
-            }
-            for (button of this.redoButtons) {
-                button.addEventListener("click", this.redo.bind(this), false);
-            }
-        }
-
-        set undoDisabled(disabled) {
-            for (var button of this.undoButtons) {
-                button.disabled = disabled;
-            }
-        }
-
-        set redoDisabled(disabled) {
-            for (var button of this.redoButtons) {
-                button.disabled = disabled;
-            }
-        }
-
-        noMoreRedos() {
-            this.history.length = this.position;
-            this.redoDisabled = true;
-        }
-
-        add(histItem) {
-            this.history.push(histItem);
-            this.position++;
-            this.undoDisabled = false;
-        }
-
-        undo() {
-            var histItem, i;
-            if (this.position === 0) {
-                alert("Nothing to undo!") // This shouldn't ever happen
-            }
-            histItem = this.history[--this.position];
-            // REVERSE the effects of the "Delta" in histItem
-            for(i = histItem.length - 2; i >= 0; i -= 2) {
-                if (histItem[i] >= 0) {
-                    // Item histItem[i+1] was added at index histItem[i]. Remove it.
-                    this.activeLayer.children[histItem[i]].remove();
-                }
-                else {
-                    // Item histItem[i+1] was removed from index -histItem[i] - 1. Re-add it.
-                    this.activeLayer.insertChild(-histItem[i] - 1, histItem[i+1]);
-                }
-            }
-            if (this.position === 0) {
-                this.undoDisabled = true;
-            }
-            this.redoDisabled = false;
-        }
-
-        redo() {
-            var histItem, i;
-            if (this.position >= this.history.length) {
-                alert("Nothing to redo!") // This shouldn't ever happen
-            }
-            histItem = this.history[this.position++];
-            // REAPPLY the effects of the "Delta" in histItem
-            for(i = 0; i < histItem.length; i += 2) {
-                if (histItem[i] >= 0) {
-                    // Add object histItem[i+1] at index histItem[i]
-                    this.activeLayer.insertChild(histItem[i], histItem[i+1]);
-                }
-                else {
-                    // Remove object at index -histItem[i] - 1 (object should be the same as histItem[i+1])
-                    this.activeLayer.children[-histItem[i] - 1].remove();
-                }
-            }
-            this.undoDisabled = false;
-            if (this.position === this.history.length) {
-                this.redoDisabled = true;
-            }
-        }
-
-        logDebugInfo() {
-            console.log("Current paths on active layer:");
-            console.log("    " + this.activeLayer.children.join(", "));
-            console.log("Current history stack:");
-            for (var i = 0; i <= this.history.length; i++) {
-                if (i > 0) {
-                    console.log(`    ${i-1}: ${this.history[i-1].join(", ")}`);
-                }
-                if (this.position === i) {
-                    console.log("    <current top of history stack>    " + 
-                                "(above can be undone, below can be redone)");
-                }
-            }
-        }
-    }
-
-
-    // CONTROLLER CLASSES FOR ALL OF THE TOOLS
-    // An Enum for the various rules about how/when to set tool property values
+    // An Enum for the various rules about how/when to set tool property values. 
     const PROPERTYRULES = Enum([
         "FIXED",            // "value"  - Always use value. Property widgets completely disabled. 
         "DEFAULT",          // "value*" - Use value initially each time tool is selected, but allow it to be changed. 
@@ -160,30 +53,39 @@ document.addEventListener("DOMContentLoaded", function() {
         "REMEMBER_NOINIT",  // "&"      - Tool remembers its previous setting when selected. First time, it uses widgets. 
     ]);
 
+
+    // CONTROLLER CLASSES FOR ALL OF THE TOOLS
     // The pass-through tool: Disable all interaction with the notetaker canvas
-    class PassthroughTool {
-        constructor(button, notetaker) {
-            this.notetaker = notetaker;
+    class PassThroughTool {
+        constructor(button, toolbar) {
+            this.toolbar = toolbar;
         }
 
         activate() {
-            for (var propertyGroup of Object.values(this.notetaker.properties)) {
+            for (var propertyGroup of Object.values(this.toolbar.properties)) {
                 propertyGroup.disabled = true;
             }
-            this.notetaker.style.pointerEvents = "none";
+            for (var notetaker of this.toolbar.notetakers.values()) {
+                notetaker.style.pointerEvents = "none";
+            }
         }
 
         deactivate() {
-            this.notetaker.style.pointerEvents = "auto";
+            for (var notetaker of this.toolbar.notetakers.values()) {
+                notetaker.style.pointerEvents = "auto";
+            }
         }
     }
 
     // An abstract base class for the objects that control all other tools
     class NotetakerTool {
-        constructor(button, notetaker, defaults) {
+        constructor(button, toolbar, defaults) {
             this.button = button;
-            this.notetaker = notetaker;
-            this.paperTool = null;
+            this.toolbar = toolbar;
+            this.paperTool = new paper.Tool();
+            this.paperTool.onMouseDown = this.onMouseDown.bind(this);
+            this.paperTool.onMouseDrag = this.onMouseDrag.bind(this);
+            this.paperTool.onMouseUp   = this.onMouseUp.bind(this);
             this.rules = {};
             for (var property in defaults) {
                 var userRule = button.dataset[property] || "*";
@@ -210,7 +112,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 }
                 // If no property widgets for this property, set property FIXED. 
                 // If also no value specified by userRule, use tool's default. 
-                if (notetaker.properties[property].widgets.size === 0) {
+                if (toolbar.properties[property].widgets.size === 0) {
                     rule.type = PROPERTYRULES.FIXED;
                     if (rule.value === null) {
                         rule.value = defaults[property];
@@ -226,8 +128,8 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         activate() {
-            for (var property in this.notetaker.properties) {
-                var propertyGroup = this.notetaker.properties[property];
+            for (var property in this.toolbar.properties) {
+                var propertyGroup = this.toolbar.properties[property];
                 if (!(property in this.rules)) {
                     propertyGroup.disabled = true;
                     continue;
@@ -271,17 +173,11 @@ document.addEventListener("DOMContentLoaded", function() {
                         break;
                 }
             }
-            if (!this.paperTool) {
-                this.paperTool = new paper.Tool();
-                this.paperTool.onMouseDown = this.onMouseDown.bind(this);
-                this.paperTool.onMouseDrag = this.onMouseDrag.bind(this);
-                this.paperTool.onMouseUp   = this.onMouseUp.bind(this);
-            }
             this.paperTool.activate();
         }
 
         setButtonStyle(property, value) {
-            value = this.notetaker.properties[property].cssConverter(value);
+            value = this.toolbar.properties[property].cssConverter(value);
             this.button.style.setProperty(`--${property}`, value);
         }
 
@@ -303,10 +199,10 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // A (slightly more specific, still abstract) subclass for the drawing tools
     class DrawingTool extends NotetakerTool {
-        constructor(button, notetaker, defaults) {
+        constructor(button, toolbar, defaults) {
             defaults = {color: "black", width: 1, opacity: 1, dash: [], 
                         ...defaults};
-            super(button, notetaker, defaults);
+            super(button, toolbar, defaults);
         }
 
         get dash_scaled() {
@@ -316,12 +212,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // The pen tool: Draw freehand lines/curves
     class PenTool extends DrawingTool {
-        constructor(button, notetaker) {
-            super(button, notetaker, {simplify: 2.5});
+        constructor(button, toolbar) {
+            super(button, toolbar, {simplify: 2.5});
         }
 
         onMouseDown(event) {
-            this.notetaker.history.noMoreRedos();
+            this.toolbar.canvasMouseDown(event.event.target, true);
             this.currentPath = new paper.Path({
                 segments: [event.point], 
                 strokeColor: this.color, 
@@ -341,19 +237,19 @@ document.addEventListener("DOMContentLoaded", function() {
             if (this.simplify >= 0) {
                 this.currentPath.simplify(this.simplify);
             }
-            this.notetaker.history.add([this.currentPath.index, 
+            this.toolbar.activeNotetaker.addHistory([this.currentPath.index, 
                     this.currentPath]);
         }
     }
 
     // The line tool: draw straight lines, optionally snap to increments of pi/4
     class LineTool extends DrawingTool {
-        constructor(button, notetaker) {
-            super(button, notetaker, {snap: 20});
+        constructor(button, toolbar) {
+            super(button, toolbar, {snap: 20});
         }
 
         onMouseDown(event) {
-            this.notetaker.history.noMoreRedos();
+            this.toolbar.canvasMouseDown(event.event.target, true);
             this.firstPoint = event.point;
             this.currentPath = new paper.Path({
                 segments: [event.point, event.point], 
@@ -400,15 +296,15 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseUp(event) {
-            this.notetaker.history.add([this.currentPath.index, 
+            this.toolbar.activeNotetaker.addHistory([this.currentPath.index, 
                     this.currentPath]);
         }
     }
 
     // The rectangle tool: draw rectangles, optionally snap to squares
     class RectangleTool extends DrawingTool {
-        constructor(button, notetaker) {
-            super(button, notetaker, {snap: 20});
+        constructor(button, toolbar) {
+            super(button, toolbar, {snap: 20});
         }
 
         rectangle(p1, p2) {
@@ -417,7 +313,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseDown(event) {
-            this.notetaker.history.noMoreRedos();
+            this.toolbar.canvasMouseDown(event.event.target, true);
             this.firstPoint = event.point;
             this.currentPath = new paper.Path({
                 segments: this.rectangle(event.point, event.point), 
@@ -463,19 +359,19 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseUp(event) {
-            this.notetaker.history.add([this.currentPath.index, 
+            this.toolbar.activeNotetaker.addHistory([this.currentPath.index, 
                     this.currentPath]);
         }
     }
 
     // The ellipse tool: draw ellipses, from center, optionally snap to circles
     class EllipseTool extends DrawingTool {
-        constructor(button, notetaker) {
-            super(button, notetaker, {snap: 20});
+        constructor(button, toolbar) {
+            super(button, toolbar, {snap: 20});
         }
 
         onMouseDown(event) {
-            this.notetaker.history.noMoreRedos();
+            this.toolbar.canvasMouseDown(event.event.target, true);
             this.center = event.point;
             this.currentPath = new paper.Path({
                 segments: [event.point], 
@@ -507,20 +403,20 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseUp(event) {
-            this.notetaker.history.add([this.currentPath.index, 
+            this.toolbar.activeNotetaker.addHistory([this.currentPath.index, 
                     this.currentPath]);
         }
     }
 
     // The delete tool: delete whole strokes (lines/curves/rectangles/etc)
     class DeleteTool extends NotetakerTool {
-        constructor(button, notetaker) {
-            super(button, notetaker, {width: 4});
+        constructor(button, toolbar) {
+            super(button, toolbar, {width: 4});
             this.hitTestOptions = {fill: true, stroke: true, segments: true};
         }
 
         onMouseDown(event) {
-            this.notetaker.history.noMoreRedos();
+            this.toolbar.canvasMouseDown(event.event.target, true);
             this.hitTestOptions.tolerance = this.width;
             this.toBeRemoved = {};
             this.removeItemsAt(event.point);
@@ -531,10 +427,11 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         removeItemsAt(point) {
-            var results = paper.project.hitTestAll(point, this.hitTestOptions);
-            for(var result of results) {
-                var item = result.item;
-                if (!item.ignore && !this.toBeRemoved[item.index]) {
+            const results = this.toolbar.activeNotetaker.project.hitTestAll(
+                    point, this.hitTestOptions);
+            for(const {item} of results) {
+                if (!item.data.ignore && !this.toBeRemoved[item.index]) {
+                    item.data.originalOpacity = item.opacity;
                     item.opacity *= 0.4;
                     this.toBeRemoved[item.index] = item;
                 }
@@ -546,22 +443,22 @@ document.addEventListener("DOMContentLoaded", function() {
             for(var item of Object.values(this.toBeRemoved)) {
                 histItem.push(-item.index - 1, item)
                 item.remove();
-                item.opacity /= 0.4;
+                item.opacity = item.data.originalOpacity;
             }
             if (histItem.length > 0) {
-                this.notetaker.history.add(histItem);
+                this.toolbar.activeNotetaker.addHistory(histItem);
             }
         }
     }
 
     // The erase tool: cover up previously drawn ink, and also divide paths
     class EraseTool extends NotetakerTool {
-        constructor(button, notetaker) {
-            super(button, notetaker, {width: 10, simplify: 2.5});
+        constructor(button, toolbar) {
+            super(button, toolbar, {width: 10, simplify: 2.5});
         }
 
         onMouseDown(event) {
-            this.notetaker.history.noMoreRedos();
+            this.toolbar.canvasMouseDown(event.event.target, true);
             this.currentPath = new paper.Path({
                 blendMode: "destination-out", 
                 segments: [event.point], 
@@ -571,7 +468,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 strokeJoin: "round", 
                 opacity: 1, 
             });
-            this.currentPath.ignore = true;
+            this.currentPath.data.ignore = true;
         }
 
         onMouseDrag(event) {
@@ -585,7 +482,8 @@ document.addEventListener("DOMContentLoaded", function() {
             }
             const histItem = [this.currentPath.index, this.currentPath];
             // Now split every other path that this erase-path intersects
-            for(i = 0; path = this.notetaker.activeLayer.children[i]; i++) {
+            const activeLayer = this.toolbar.activeNotetaker.project.activeLayer;
+            for(i = 0; path = activeLayer.children[i]; i++) {
                 // Ignore other erase-paths
                 if (path.blendMode === "destination-out") {
                     continue;
@@ -612,39 +510,43 @@ document.addEventListener("DOMContentLoaded", function() {
                     newPaths.forEach((newPath, j) => {
                         histItem.push(index + j, newPath);
                     });
-                    this.notetaker.activeLayer.insertChildren(index, newPaths);
+                    activeLayer.insertChildren(index, newPaths);
                     i = pathCopy.index;
                 }
             }
-            this.notetaker.history.add(histItem);
+            this.toolbar.activeNotetaker.addHistory(histItem);
         }
     }
 
     // The laser-pointer tool: show a colored dot under the pointer
     class LaserPointerTool extends NotetakerTool {
-        constructor(button, notetaker) {
-            super(button, notetaker, {color: "red", width: 10, opacity: 0.6, 
+        constructor(button, toolbar) {
+            super(button, toolbar, {color: "red", width: 10, opacity: 0.6, 
                     fade: {duration: 500, easing: "easeInQuad"}});
-            this.point = new paper.Path({
-                segments: [], 
-                strokeCap: "round", 
-                strokeJoin: "round", 
-            });
-            this.point.ignore = true;
-            this.point.addTo(this.notetaker.pointerLayer);
-            this.tween = null;
+            this.pointMap = new WeakMap()
+            this.point = null;
         }
 
         onMouseDown(event) {
-            if (this.tween) {
-                this.tween.stop();
-                this.tween = null;
+            const canvas = event.event.target;
+            this.toolbar.canvasMouseDown(canvas, false);
+            this.point = this.pointMap.get(canvas);
+            if (!this.point) {
+                this.point = new paper.Path({
+                    strokeCap: "round", 
+                    strokeJoin: "round", 
+                });
+                this.point.addTo(this.toolbar.activeNotetaker.pointerLayer);
+                this.pointMap.set(canvas, this.point);
             }
+            else if (this.point.data.tween) {
+                this.point.data.tween.stop();
+                this.point.data.tween = null;
+            }
+            this.point.segments = [event.point, event.point];
             this.point.strokeColor = this.color;
             this.point.strokeWidth = this.width;
             this.point.opacity = this.opacity;
-            this.tweenOptions = this.fade;
-            this.point.segments = [event.point, event.point];
         }
 
         onMouseDrag(event) {
@@ -652,7 +554,8 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseUp(event) {
-            this.tween = this.point.tween({opacity: 0}, this.tweenOptions);
+            this.point.data.tween = this.point.tween({opacity: 0}, this.fade);
+            this.point = null;
         }
     }
 
@@ -661,25 +564,31 @@ document.addEventListener("DOMContentLoaded", function() {
         constructor(button, notetaker) {
             super(button, notetaker, {color: "red", width: 10, opacity: 0.6, 
                     fade: {duration: 2000, easing: "easeInCubic"}});
-            this.paths = new paper.CompoundPath({
-                strokeCap: "round", 
-                strokeJoin: "round", 
-            });
-            this.paths.addTo(this.notetaker.pointerLayer);
-            this.tween = null;
+            this.pathsMap = new WeakMap();
+            this.paths = null;
         }
 
         onMouseDown(event) {
-            if (this.tween) {
-                this.tween.stop();
-                this.tween = null;
+            const canvas = event.event.target;
+            this.toolbar.canvasMouseDown(canvas, false);
+            this.paths = this.pathsMap.get(canvas);
+            if (!this.paths) {
+                this.paths = new paper.CompoundPath({
+                    strokeCap: "round", 
+                    strokeJoin: "round", 
+                });
+                this.paths.addTo(this.toolbar.activeNotetaker.pointerLayer);
+                this.pathsMap.set(canvas, this.paths);
+            }
+            else if (this.paths.data.tween) {
+                this.paths.data.tween.stop();
+                this.paths.data.tween = null;
             }
             this.paths.strokeColor = this.color;
             this.paths.strokeWidth = this.width;
             this.paths.opacity = this.opacity;
-            this.tweenOptions = this.fade;
             this.paths.moveTo(event.point);
-            this.paths.lastChild.ignore = true;
+            this.paths.lastChild.add(event.point);
         }
 
         onMouseDrag(event) {
@@ -687,12 +596,12 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         onMouseUp(event) {
-            this.tween = this.paths.tween({opacity: 0}, this.tweenOptions);
-            this.tween.then(this.finish.bind(this));
+            this.paths.data.tween = this.paths.tween({opacity: 0}, this.fade);
+            this.paths.data.tween.then(this.finish.bind(this));
         }
 
         finish() {
-            this.tween = null;
+            this.paths.data.tween = null;
             this.paths.removeChildren();
         }
     }
@@ -702,12 +611,12 @@ document.addEventListener("DOMContentLoaded", function() {
     // Abstract base class for a set of mutually exclusive widgets
     class WidgetGroup {
         constructor() {
-            this.widgets = new Set();
+            this.widgets = new Map();
             this._selected = null;
         }
 
-        add(widget) {
-            this.widgets.add(widget);
+        add(widget, data) {
+            this.widgets.set(widget, data);
             widget.addEventListener("click", this.click.bind(this), false);
             if (this.widgets.size === 1 || widget.classList.contains("selected")) {
                 this.select(widget);
@@ -715,13 +624,13 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         select(widget) {
+            widget.classList.add("selected");
             if (!this.widgets.has(widget) || widget === this._selected) {
                 return;
             }
             if (this._selected) {
                 this._selected.classList.remove("selected");
             }
-            widget.classList.add("selected");
             this._selected = widget;
         }
 
@@ -731,36 +640,49 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     // click function for a toolButtonGroup. (Worth creating a whole subclass?) 
-    function toolButtonClick(event) {
-        var button = event.currentTarget;
-        if (this._selected !== button) {
-            this._selected._tool.deactivate();
+    class ToolButtonGroup extends WidgetGroup {
+        click(event) {
+            var button = event.currentTarget;
+            if (this._selected !== button) {
+                this.widgets.get(this._selected).tool.deactivate();
+            }
+            this.select(button);
+            this.widgets.get(button).tool.activate();
         }
-        this.select(button);
-        button._tool.activate();
+
+        get currentTool() {
+            return this._selected ? this.widgets.get(this._selected).tool : null;
+        }
     }
 
     // WidgetGroup for a set of widgets that control a certain tool property
     class PropertyWidgetGroup extends WidgetGroup {
-        constructor(property, notetaker, cssConverter) {
+        constructor(property, toolbarController, cssConverter) {
             super();
             this.property = property;
-            this.notetaker = notetaker;
+            this.toolbarController = toolbarController;
             this.cssConverter = cssConverter ? cssConverter : (x => x);
+        }
+
+        add(widget) {
+            const value = attributeDecode(widget.dataset.value);
+            widget.style.setProperty("--value", this.cssConverter(value));
+            super.add(widget, {value});
         }
 
         select(widget) {
             super.select(widget);
-            this.notetaker.toolbar.style.setProperty(`--${this.property}`, 
-                    this.cssConverter(widget._value));
+            const value = this.cssConverter(this.widgets.get(widget).value);
+            this.toolbarController.toolbar.style.setProperty(
+                    `--${this.property}`, value);
         }
 
         click(event) {
-            var widget = event.currentTarget;
+            const widget = event.currentTarget;
             this.select(widget);
-            var current = this.notetaker.toolButtons.selected;
-            if (current) {
-                current._tool.setProperty(this.property, widget._value);
+            const tool = this.toolbarController.toolButtons.currentTool;
+            if (tool) {
+                tool.setProperty(this.property, this.widgets.get(widget).value);
             }
         }
 
@@ -771,13 +693,13 @@ document.addEventListener("DOMContentLoaded", function() {
             if (!this._selected.classList.contains("selected")) {
                 this._selected.classList.add("selected")
             }
-            return this._selected._value;
+            return this.widgets.get(this._selected).value;
         }
 
         selectValue(value) {
             value = attributeEncode(value);
-            for (var widget of this.widgets) {
-                if (attributeEncode(widget._value) === value) {
+            for (const [widget, data] of this.widgets) {
+                if (attributeEncode(data.value) === value) {
                     this.select(widget);
                     return;
                 }
@@ -786,7 +708,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         set disabled(disabled) {
-            for (var widget of this.widgets) {
+            for (var widget of this.widgets.keys()) {
                 widget.disabled = disabled;
             }
         }
@@ -810,153 +732,73 @@ document.addEventListener("DOMContentLoaded", function() {
         "laser-pointer-tool":   { element: "button", type: "tool", controller: LaserPointerTool }, 
         "trailing-laser-tool":  { element: "button", type: "tool", controller: TrailingLaserTool }, 
         "pointer-tool":         { element: "button", type: "tool", controller: LaserPointerTool }, // To be implemented...
-        "pass-through-tool":    { element: "button", type: "tool", controller: PassthroughTool }, 
+        "pass-through-tool":    { element: "button", type: "tool", controller: PassThroughTool }, 
     };
 
-    function createWidget(type, attributes, selected) {
+    async function applyTheme(rootElement) {
+        const themeUrl = rootElement.dataset.notetakerThemeUrl;
+        if (!themeUrl) {
+            console.warn(`Notetaker warning: Custom toolbar (id ${rootElement.id}) has no theme specified. The widgets in this toolbar may appear blank.`);
+            return;
+        }
+        const response = await window.fetch(themeUrl);
+        const theme = await response.json();
+        const selector = "button[data-notetaker-type], input[data-notetaker-type]";
+        for (const widget of rootElement.querySelectorAll(selector)) {
+            styleWidget(widget, theme);
+        }
+    }
+
+    function createWidget(type, attributes, selected, theme) {
         if (!(type in widgetTypes)) {
-            log(`WARNING: Tried to create a widget of unknown type "${type}".`);
+            console.warn(`Notetaker warning: unknown widget type "${type}"`);
             return;
         }
         const widget = document.createElement(widgetTypes[type].element);
-        widget.dataset.type = `notetaker-${type}`;
+        widget.dataset.notetakerType = type;
         for (var [attribute, value] of Object.entries(attributes)) {
             widget.dataset[attribute] = attributeEncode(value);
         }
         if (selected) {
             widget.className = "selected";
         }
-        styleWidget(widget);
+        styleWidget(widget, theme);
         return widget;
     }
 
-    function styleWidget(widget) {
-        const type = widget.dataset.type.slice(10); // Cut leading "notetaker-"
+    function styleWidget(widget, theme) {
+        const type = widget.dataset.notetakerType;
         if (!(type in widgetTypes)) {
-            throw new TypeError(`Notetaker widget has unknown type ${type}`);
+            console.warn(`Notetaker warning: unknown widget type "${type}"`);
+            return;
         }
         if (widgetTypes[type].type === "property" && 
                 !("value" in widget.dataset)) {
-            log(`WARNING: ${type} created with no value specified.`);
-            return;
+            console.warn(`Notetaker warning: ${type} created with no value`);
         }
         if (!(type in theme)) {
-            log(`WARNING: ${type} is not in this theme.`);
+            console.warn(`Notetaker warning: ${type} is not in this theme`);
             return;
         }
         widget.innerHTML = theme[type];
     }
 
-    class Notetaker extends HTMLElement {
-        constructor() {
-            super();
-            this.activeLayer = null;
-            this.pointerLayer = null;
-            this.properties = null;
-            this.toolButtons = null;
-            this.history = null;
-        }
-
-        connectedCallback() {
-            if (this._initialized) {
-                return;
-            }
-            this._initialized = true;
-            const configUrl = this.getAttribute("config-href");
-            const themeUrl = this.getAttribute("theme-href");
-            this.loadConfigAndThemeAndSetupDom(configUrl, themeUrl)
-                .then(canvas => this.setupComponent(canvas))
-                .catch(error => { console.error(error); });
-        }
-
-        // Fetch both the configuration and the theme JSON data, if necessary, 
-        // and apply them to the DOM. This async method returns the canvas. 
-        async loadConfigAndThemeAndSetupDom(configUrl, themeUrl) {
-            var response;
-            if (!configUrl && !configuration) {
-                throw new ReferenceError("note-taker: No config specified");
-            }
-            if (!configuration || 
-                    (configUrl && configUrl !== configuration.configUrl)) {
-                try {
-                    response = await window.fetch(configUrl);
-                    configuration = await response.json();
-                    configuration.configUrl = configUrl;
-                }
-                catch(error) {
-                    console.log("Error fetching configuration");
-                    throw error;
-                }
-            }
-            if (!theme && !themeUrl) {
-                themeUrl = configuration.theme;
-            }
-            if (!theme || (themeUrl && themeUrl !== theme.themeUrl)) {
-                try {
-                    response = await window.fetch(themeUrl);
-                    theme = await response.json();
-                    theme.themeUrl = themeUrl;
-                }
-                catch(error) {
-                    console.log("Error fetching theme");
-                    throw error;
-                }
-            }
-            // Set the toolbar position as an attribute, if not already set
-            const positions = ["top", "bottom", "left", "right"];
-            if (!positions.includes(this.getAttribute("toolbar"))) {
-                this.setAttribute("toolbar", configuration.position || "top");
-            }
-            // Set up an inner style sheet, in the Shadow DOM
-            //     Note: We may eventually allow for <link> stylesheets as well
-            const style = document.createElement("style");
-            style.textContent = theme.stylesheet;
-            // Now create the toolbar, and populate it
-            this.toolbar = document.createElement("div");
-            for (const part of ["start", "middle", "end"]) {
-                const toolbar_part = document.createElement("div");
-                toolbar_part.className = "toolbar_section";
-                if (part in configuration) {
-                    for (let widget of configuration[part]) {
-                        let {type, ...attributes} = widget;
-                        let selected = type.endsWith("*");
-                        type = selected ? type.slice(0, -1) : type;
-                        widget = createWidget(type, attributes, selected);
-                        toolbar_part.appendChild(widget);
-                    }
-                }
-                this.toolbar.appendChild(toolbar_part);
-            }
-            if (false) { // Placeholder for eventually using HTML toolbar
-                for (widget of toolbar.querySelectorAll("button[data-type^='notetaker-']")) {
-                    styleWidget(widget);
-                }
-            }
-            const canvas = document.createElement("canvas");
-            this.attachShadow({mode: "open"});
-            this.shadowRoot.append(style, this.toolbar, canvas);
-            return canvas;
-        }
-
-        setupComponent(canvas) {
-            // Now that we've got our canvas, we can set up PaperJS
-            const project = new paper.Project(canvas);
-            project.activate(); // I DON'T THINK THIS IS NECESSARY...
-            paperProjects.set(canvas, project);
-            this.activeLayer = project.activeLayer;
-            this.pointerLayer = new paper.Layer();
-            this.activeLayer.activate();
-
-            paper.setup(canvas);                    // Note this must be done 
-            this.activeLayer = new paper.Layer();   // before instantiating the 
-            this.pointerLayer = new paper.Layer();  // tools, as some of them 
-            this.activeLayer.activate();            // need the pointerLayer. 
-
-            // Now set up the WidgetGroups for the property widgets... 
-            const cssConverters = {
-                width: x => (x ** 0.75 / 2), 
-                dash: x => (x.length ? x.map(y => y / 3) : [100, 0]), 
-            }
+    // The controller class for toolbars
+    const cssConverters = {
+        width: x => (x ** 0.75 / 2), 
+        dash: x => (x.length ? x.map(y => y / 3) : [100, 0]), 
+    }
+    class ToolbarController {
+        constructor(id) {
+            // Construct a PaperScope for this toolbar. Activated automatically. 
+            this.paperScope = new paper.PaperScope();
+            this.notetakers = new Map();
+            this.activeNotetaker = null;
+            this.toolbar = null; // The actual DOM element, for setting styles. 
+            this.toolButtons = new ToolButtonGroup();
+            this.undoButtons = [];
+            this.redoButtons = [];
+            // The PropertyWidgetGroups are created automatically as needed. 
             this.properties = new Proxy({}, {
                 get: (object, property) => {
                     if (!(property in object)) {
@@ -966,37 +808,358 @@ document.addEventListener("DOMContentLoaded", function() {
                     return object[property];
                 }
             });
+            // Check whether or not to call setup() now, or wait: 
+            if (!id) { // A <note-taker> element with an attached toolbar. Wait. 
+                return;
+            }
+            let rootElement = document.getElementById(id);
+            if (!rootElement || (rootElement instanceof NotetakerToolbar)) {
+                // The NotetakerToolbar will have to call our .setup() later. 
+                return;
+            }
+            // The toolbar is an existent HTML element. Call .setup() now. 
+            applyTheme(rootElement).catch(error => { console.error(error); });
+            this.setup(rootElement);
+        }
 
-            // ...and the tool buttons. 
-            this.toolButtons = new WidgetGroup();
-            this.toolButtons.click = toolButtonClick.bind(this.toolButtons);
-
-            // Then we construct/configure the controllers for all those widgets
-            for (let widget of this.toolbar.querySelectorAll("button, input")) {
-                let widgetInfo = widgetTypes[widget.dataset.type.slice(10)];
+        // The following method should be called *after* the toolbar's DOM is 
+        // fully populated. You pass it a root DOM node that contains all the 
+        // toolbar widgets. It queries the DOM to find and set up those widgets. 
+        setup(rootElement) {
+            this.toolbar = rootElement;
+            const selector = "button[data-notetaker-type], input[data-notetaker-type]";
+            for (const widget of rootElement.querySelectorAll(selector)) {
+                const widgetInfo = widgetTypes[widget.dataset.notetakerType];
                 switch(widgetInfo.type) {
                     case "property":
                         let propertyGroup = this.properties[widgetInfo.property];
-                        widget._value = attributeDecode(widget.dataset.value);
-                        widget.style.setProperty("--value", 
-                                propertyGroup.cssConverter(widget._value));
                         propertyGroup.add(widget);
                         break;
                     case "tool":
-                        widget._tool = new widgetInfo.controller(widget, this);
-                        this.toolButtons.add(widget);
+                        this.toolButtons.add(widget, {});
+                        break;
+                    case "undo":
+                        this.undoButtons.push(widget);
+                        widget.disabled = true;
+                        widget.addEventListener("click", () => {
+                            this.activeNotetaker.undo();
+                        }, false);
+                        break;
+                    case "redo":
+                        this.redoButtons.push(widget);
+                        widget.disabled = true;
+                        widget.addEventListener("click", () => {
+                            this.activeNotetaker.redo();
+                        }, false);
                         break;
                 }
             }
+            // Now create all the NotetakerTools for the tool buttons. 
+            // Note: This must be done *after* creating the property widgets, 
+            // because the tool constructor checks to see how many property 
+            // widgets there are for each property, and acts accordingly. 
+            this.paperScope.activate(); // <-- IMPORTANT! To create paper.Tools
+            for (const [button, data] of this.toolButtons.widgets) {
+                const widgetInfo = widgetTypes[button.dataset.notetakerType];
+                data.tool = new widgetInfo.controller(button, this);
+            }
+            this.toolButtons.currentTool.activate();
+        }
 
-            // Finally, set up the history, and activate our first tool! 
-            this.history = new History(this);
-            this.toolButtons.selected._tool.activate();
-            //paper.view.draw();
+        // This is called by the <note-taker> to add itself (and its canvas) to 
+        // our this.notetakers map. It also creates the paper.Project for that 
+        // <note-taker> and returns it. And it (re-)activates the selected tool, 
+        // if any, which is important in case that tool is the PassThroughTool. 
+        addNotetaker(canvas, notetaker) {
+            this.notetakers.set(canvas, notetaker);
+            this.paperScope.activate();
+            const project = new paper.Project(canvas);
+            const tool = this.toolButtons.currentTool;
+            if (tool instanceof PassThroughTool) {
+                tool.activate();
+            }
+            return project;
+        }
+
+        activate(notetaker) {
+            this.activeNotetaker = notetaker;
+            notetaker.project.activate();
+            this.updateUndoRedo(notetaker);
+        }
+
+        canvasMouseDown(canvas, noMoreRedos) {
+            const notetaker = this.notetakers.get(canvas);
+            if (noMoreRedos) {
+                notetaker.noMoreRedos();
+            }
+            this.activate(notetaker);
+        }
+
+        updateUndoRedo(notetaker) {
+            if (notetaker !== this.activeNotetaker) {
+                return;
+            }
+            const undoDisabled = notetaker.undoDisabled;
+            const redoDisabled = notetaker.redoDisabled;
+            for (const button of this.undoButtons) {
+                button.disabled = undoDisabled;
+            }
+            for (const button of this.redoButtons) {
+                button.disabled = redoDisabled;
+            }
+        }
+    }
+
+    class NotetakerToolbar extends HTMLElement {
+        constructor() {
+            super();
+            this.controller = null;
+        }
+
+        connectedCallback() {
+            if (this._connected) {
+                return;
+            }
+            this._connected = true;
+            if (!this.controller) {
+                const id = this.getAttribute("id");
+                if (!id) {
+                    throw new ReferenceError(
+                            "<notetaker-toolbar>: id not specified");
+                }
+                this.controller = toolbarControllers[id];
+            }
+            this.setup().catch(error => { console.error(error); });
+        }
+
+        // Fetch the config and the theme (JSON data), and populate the DOM. 
+        async setup() {
+            var response;
+            const configUrl = this.getAttribute("config-url");
+            var themeUrl = this.getAttribute("theme-url");
+            if (!configUrl) {
+                throw new ReferenceError(
+                        "<notetaker-toolbar>: config-url not specified");
+            }
+            // Fetch the config and the theme. 
+            response = await window.fetch(configUrl);
+            const config = await response.json();
+            if (!themeUrl) {
+                themeUrl = config.theme;
+            }
+            response = await window.fetch(themeUrl);
+            const theme = await response.json();
+            // Adjust attributes for position/orientation of toolbar
+            const positions = new Map([["top", "horizontal"], ["bottom", 
+                    "horizontal"], ["left", "vertical"], ["right", "vertical"]]);
+            if (this.parentNode instanceof ShadowRoot && 
+                    this.parentNode.host instanceof Notetaker) {
+                // This is an attached toolbar, so we must set the position
+                let position = this.parentNode.host.getAttribute("toolbar");
+                if (!positions.has(position)) {
+                    position = config.position;
+                    if (!positions.has(position)) {
+                        position = "top";
+                    }
+                    this.parentNode.host.setAttribute("toolbar", position);
+                }
+                this.setAttribute("orientation", positions.get(position));
+            }
+            else {
+                // This is a detached toolbar, so we just set the orientation
+                const orientations = new Set(positions.values());
+                let orientation = this.getAttribute("orientation");
+                if (!orientations.has(orientation)) {
+                    orientation = config.orientation;
+                    if (!orientations.has(orientation)) {
+                        orientation = positions.get(config.position) || 
+                                "horizontal";
+                    }
+                    this.setAttribute("orientation", orientation);
+                }
+            }
+            // Set up an inner style sheet, in the Shadow DOM
+            //     Note: We may eventually allow for <link> stylesheets as well
+            const style = document.createElement("style");
+            style.textContent = theme.stylesheet;
+            // Now create the toolbar, and populate it
+            const toolbar = document.createElement("div");
+            for (const part of ["start", "middle", "end"]) {
+                const toolbar_part = document.createElement("div");
+                if (part in config) {
+                    for (let widget of config[part]) {
+                        let {type, ...attributes} = widget;
+                        let selected = type.endsWith("*");
+                        type = selected ? type.slice(0, -1) : type;
+                        widget = createWidget(type, attributes, selected, theme);
+                        toolbar_part.appendChild(widget);
+                    }
+                }
+                toolbar.appendChild(toolbar_part);
+            }
+            this.attachShadow({mode: "open"});
+            this.shadowRoot.append(style, toolbar);
+            this.controller.setup(toolbar);
+        }
+    }
+
+    const NOTETAKER_STYLESHEET = `
+    :host {
+        direction: ltr;
+        writing-mode: horizontal-tb;
+        display: flex;
+    }
+    :host([toolbar=top]) {
+        flex-direction: column;
+    }
+    :host([toolbar=bottom]) {
+        flex-direction: column-reverse;
+    }
+    :host([toolbar=left]) {
+        flex-direction: row;
+    }
+    :host([toolbar=right]) {
+        flex-direction: row-reverse;
+    }
+    :host > notetaker-toolbar {
+        pointer-events: auto;
+        flex: none;
+    }
+    :host > canvas {
+        flex: auto;
+    }
+    :host.hidden > canvas {
+        visibility: hidden;
+    }
+    `;
+    class Notetaker extends HTMLElement {
+        constructor() {
+            super();
+            this.project = null;
+            this.pointerLayer = null;
+            this.history = [];
+            this.historyPosition = 0;
+            this.toolbarController = null;
+        }
+
+        connectedCallback() {
+            if (this._connected) {
+                return;
+            }
+            this._connected = true;
+            const configUrl = this.getAttribute("config-url");
+            const toolbarId = this.getAttribute("toolbar-id");
+            if (!configUrl && !toolbarId) {
+                throw new ReferenceError("<note-taker>: neither config-url " + 
+                        "nor toolbar-id specified");
+            }
+            this.attachShadow({mode: "open"});
+            const style = document.createElement("style");
+            style.textContent = NOTETAKER_STYLESHEET;
+            const canvas = document.createElement("canvas");
+            // If config-url is given, create an attached <notetaker-toolbar>. 
+            if (configUrl) {
+                this.toolbarController = new ToolbarController();
+                const toolbar = document.createElement("notetaker-toolbar");
+                toolbar.setAttribute("config-url", configUrl);
+                const themeUrl = this.getAttribute("theme-url");
+                if (themeUrl) {
+                    toolbar.setAttribute("theme-url", themeUrl);
+                }
+                toolbar.controller = this.toolbarController;
+                this.shadowRoot.append(style, toolbar, canvas);
+            }
+            // If toolbar-id is given, we just use that ToolbarController. 
+            else {
+                this.toolbarController = toolbarControllers[toolbarId];
+                this.shadowRoot.append(style, canvas);
+            }
+            // Now that we've got our canvas, we can set up PaperJS
+            this.project = this.toolbarController.addNotetaker(canvas, this);
+            const mainLayer = new paper.Layer();
+            this.pointerLayer = new paper.Layer();
+            mainLayer.activate();
+        }
+
+        noMoreRedos() {
+            this.history.length = this.historyPosition;
+        }
+
+        addHistory(histItem) {
+            this.history.push(histItem);
+            this.historyPosition++;
+            this.toolbarController.updateUndoRedo(this);
+        }
+
+        get undoDisabled() {
+            return this.historyPosition === 0;
+        }
+
+        get redoDisabled() {
+            return this.historyPosition === this.history.length;
+        }
+
+        undo() {
+            if (this.historyPosition === 0) {
+                alert("Nothing to undo!") // This shouldn't ever happen
+            }
+            const histItem = this.history[--this.historyPosition];
+            const activeLayer = this.project.activeLayer;
+            // REVERSE the effects of the "Delta" in histItem
+            for(let i = histItem.length - 2; i >= 0; i -= 2) {
+                if (histItem[i] >= 0) {
+                    // Item histItem[i+1] was added at index histItem[i]. 
+                    // Remove it. 
+                    activeLayer.children[histItem[i]].remove();
+                }
+                else {
+                    // Item histItem[i+1] was removed from index 
+                    // -histItem[i] - 1. Re-add it. 
+                    activeLayer.insertChild(-histItem[i] - 1, histItem[i + 1]);
+                }
+            }
+            this.toolbarController.updateUndoRedo(this);
+        }
+
+        redo() {
+            if (this.historyPosition >= this.history.length) {
+                alert("Nothing to redo!") // This shouldn't ever happen
+            }
+            const histItem = this.history[this.historyPosition++];
+            const activeLayer = this.project.activeLayer;
+            // REAPPLY the effects of the "Delta" in histItem
+            for(let i = 0; i < histItem.length; i += 2) {
+                if (histItem[i] >= 0) {
+                    // Add object histItem[i + 1] at index histItem[i]. 
+                    activeLayer.insertChild(histItem[i], histItem[i + 1]);
+                }
+                else {
+                    // Remove object at index -histItem[i] - 1. (Object should 
+                    // be the same as histItem[i + 1].) 
+                    activeLayer.children[-histItem[i] - 1].remove();
+                }
+            }
+            this.toolbarController.updateUndoRedo(this);
+        }
+
+        logHistoryDebugInfo() {
+            console.debug("Current paths on active layer:");
+            console.debug("    " + this.project.activeLayer.children.join(", "));
+            console.debug("Current history stack:");
+            for (var i = 0; i <= this.history.length; i++) {
+                if (i > 0) {
+                    console.debug(`    ${i-1}: ${this.history[i-1].join(", ")}`);
+                }
+                if (this.historyPosition === i) {
+                    console.debug("    <current top of history stack>    " + 
+                                  "(above can be undone, below can be redone)");
+                }
+            }
         }
     }
 
     // Define our custom element! 
+    customElements.define("notetaker-toolbar", NotetakerToolbar);
     customElements.define("note-taker", Notetaker);
 });
 

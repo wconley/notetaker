@@ -1,0 +1,51 @@
+body {
+    margin: 0;
+    padding: 0;
+}
+
+.main_content {
+    --definition-color: red;
+    width: 40em;
+    margin: 0 auto;
+    /*font-family: MJXZERO, MJXTEX, serif;*/
+    /*font-family: MathJax_Main, serif;*/
+    font-size: 120%;
+}
+
+span.define {
+    font-style: italic;
+    color: var(--definition-color);
+}
+
+
+/* Our custom note-taker element. Now, all other styling of this element and its 
+ * contents is internal to this component, in its shadow DOM. Note that we still 
+ * want to set its position on the page and its dimensions, as well as its 
+ * z-index (if it's absolutely positioned) here, not internally. */
+note-taker {
+    position: absolute;
+    top: 2em;
+    left: 0;
+    width: 100%;
+    height: calc(100% - 2em);
+    z-index: 999;
+}
+
+#notetaker_toolbar {
+    height: 2em;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    background-color: cornflowerblue;
+}
+#notetaker_toolbar > div {
+    flex: none;
+    height: 2em;
+    display: flex;
+    flex-direction: row;
+}
+#notetaker_toolbar button {
+    flex: none;
+    margin: 0 0.1em;
+}
+

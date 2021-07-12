@@ -1,0 +1,99 @@
+body {
+    margin: 0;
+    padding: 0;
+}
+
+#main_grid_layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 400px 400px;
+}
+
+.pagecontent {
+    position: relative;
+    margin: 1em 3em;
+    border: 2px solid gray;
+    padding: 1em;
+}
+
+.pagecontent p {
+    margin: 0 0 1em 0;
+}
+
+.plotly_plot {
+    width: 300px;
+    height: 300px;
+    margin: 0 auto;
+    border: 1px solid green;
+}
+
+/* Our custom note-taker element. Now, all other styling of this element and its 
+ * contents is internal to this component, in its shadow DOM. Note that we still 
+ * want to set its position on the page and its dimensions, as well as its 
+ * z-index (if it's absolutely positioned) here, not internally. */
+note-taker {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 999;
+    border: 1px solid red;
+}
+
+/* Our custom notetaker-toolbar element, used for a (non-custom) detached 
+ * toolbar. Again, the only styling we need to set here is the position and 
+ * maybe size of the toolbar. All other styling is handled internally within the 
+ * toolbar itself. */
+#toolbar1 {
+}
+
+#toolbar2.pagecontent {
+    padding: 3em;
+}
+
+#toolbar2_left {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2em;
+    height: 100%;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+#toolbar2_left button {
+    flex: none;
+    margin: 0.1em 0;
+}
+
+#toolbar2_topright {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 100%;
+    height: 2em;
+    z-index: 1000;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+#toolbar2_bottomright {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 100%;
+    height: 2em;
+    z-index: 1000;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+#toolbar2_topright button, #toolbar2_bottomright button {
+    flex: none;
+    margin: 0 0.1em;
+}
+

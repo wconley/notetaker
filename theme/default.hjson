@@ -1,45 +1,21 @@
 {
   stylesheet: '''
-    :host {
-        direction: ltr;
-        writing-mode: horizontal-tb;
-        display: flex;
-    }
-    :host([toolbar=top]) {
-        flex-direction: column;
-    }
-    :host([toolbar=bottom]) {
-        flex-direction: column-reverse;
-    }
-    :host([toolbar=left]) {
-        flex-direction: row;
-    }
-    :host([toolbar=right]) {
-        flex-direction: row-reverse;
-    }
     :host > div {
-        pointer-events: auto;
-        flex: none;
-        height: 2em;
         display: flex;
         justify-content: space-between;
         background-color: var(--notetaker-toolbar-background, cornflowerblue);
     }
-    :host([toolbar=top]) > div, :host([toolbar=bottom]) > div {
+    :host > div > div {
+        flex: none;
+        display: flex;
+    }
+    :host([orientation='horizontal']) div {
+        height: 2em;
         flex-direction: row;
     }
-    :host([toolbar=left]) > div, :host([toolbar=right]) > div {
+    :host([orientation='vertical']) div {
+        width: 2em;
         flex-direction: column;
-    }
-    :host > canvas {
-        flex: auto;
-    }
-    :host.hidden > canvas {
-        visibility: hidden;
-    }
-    .toolbar-section {
-        flex: none;
-        height: 2em;
     }
     button {
         font-size: 100%;
@@ -58,16 +34,15 @@
     }
     button.selected {
         border: 1.5px outset indianred;
-        /*border: 1px solid red;*/
     }
     button:disabled, button:disabled:hover, button:disabled.selected {
         border: 1.5px solid darkgray;
         background-color: darkgray;
     }
-    :host([toolbar=top]) button, :host([toolbar=bottom]) button {
+    :host([orientation='horizontal']) button {
         margin: 0 0.1em;
     }
-    :host([toolbar=left]) button, :host([toolbar=right]) button {
+    :host([orientation='vertical']) button {
         margin: 0.1em 0;
     }
     '''

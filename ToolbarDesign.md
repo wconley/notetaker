@@ -56,9 +56,23 @@ To facilitate having multiple canvases, plus the ability to have a single toolba
             - The undo and redo buttons of a Toolbar must operate on the History object of the toolbar's *active* Notetaker object. 
             - This also means that when a different Notetaker is activated, we have to update the status of the undo and redo buttons of the toolbar, to reflect whether they are disabled or not. 
             - So the history object no longer controls the undo/redo buttons! 
-            - Instead, the history must simply maintain state about whether undo/redo should be disabled/enabled. The Toolbar will query that state when it needs to. 
+            - However, it may still need to be able to tell the toolbar when to update these buttons, in some cases. 
+            - Perhaps just have getter(s) to query whether they should be disabled, on demand. 
+            - Perhaps just fold the History class into the Notetaker element class (!), since there's really not much else there. Otherwise, you need (at least) references toolbar <==> notetaker <==> history, and often one has to go through the middle just to get to the other. 
     - There should be a module-global Map, called toolbars, that maps DOM elements (or element IDs) to Toolbar objects. 
         - The reason this is needed is that a toolbar element can be one of our <notetaker-toolbar> custom elements, *or* it can be built by the user in HTML. In the latter case, if multiple <note-taker>s are to use the same toolbar, we need to ensure that they use the same Toolbar object. 
         - For a <note-taker> with its own built-in toolbar, this is unnecessary, as its toolbar can't be shared with another <note-taker>. 
 
+Ways of constructing and configuring a <note-taker> and its toolbar: 
+1. <note-taker> with attached toolbar (the most basic, what we got working first)
+    - Specify config-url (and optionally theme-url) as attributes on the <note-taker> element. It is an error (or at least undefined behavior) to specify one/both of these and also a toolbar-id attribute. 
+    - The <note-taker> must load the config, at least, because it needs to know the toolbar position. It must then create its own <notetaker-toolbar> and corresponding ToolbarController. But it would be nice if it could just pass the config and/or theme directly to the <notetaker-toolbar>. Alternatively, it could just bypass <notetaker-toolbar>, and directly construct the toolbar DOM itself. 
+2. Detached toolbar, controlling one or more <note-taker>s
+    - Specify config-url (and optionally theme-url) as attributes on the <notetaker-toolbar> element. Specify toolbar-id on the <note-taker> element. 
+    - In this situation, the <note-taker> may be constructed/connected first, or the <notetaker-toolbar> may be, *and* there may be multiple <note-taker>s that get constructed before and/or after their corresponding <notetaker-toolbar>. 
+    - Since the <note-taker> encapsulates a paper.Project, and this can't/shouldn't be constructed until we have a paper.PaperScope for it (which is encapsulated by the Toolbar), we can't complete the paper.js-related parts of the setup of the <note-taker> until its Toolbar is all set up. So the connectedCallback of <note-taker> should just do the DOM setup (which in the detached case is very little) and then... maybe set up a callback/promise for the paper.js-related parts of the setup? Or... read on. 
+    - Since the Toolbar object, and even the <notetaker-toolbar> element, may not even exist when the <note-taker> is being set up, we need something more than just a simple Map from toolbar-ids/<notetaker-toolbar>s to Toolbar objects. But a Proxy object should be enough: if the Toolbar object corresponding to that toolbar-id does not exist, it is created, associated to that id, and returned. If it exists, it is returned. Then the constructor for Toolbar *just* sets up the paper.PaperScope, without setting up any tools or anything (yet), nor doing anything with the DOM. 
+    - When the <notetaker-toolbar> has *finished* setting itself up (added all its DOM stuff), it *also* looks up its Toolbar object in the same way, via its id, and calls a method on the Toolbar saying “Here I am. Inspect my DOM and configure yourself accordingly.” 
+3. Custom (HTML) toolbar, controlling one or more <note-taker>s
+    - Same as above, but slight addendum to the second-to-last bullet: the Toolbar constructor checks the type of element with the given id. If it's a <notetaker-toolbar>, it does nothing (waiting for the <notetaker-toolbar> to set itself up and call the appropriate method). *Otherwise*, it goes ahead and sets itself up, under the assumption that the DOM for the custom toolbar is all ready to go. It would be nice to provide a way for a user to call this manually, as well, so that if they wanted to use JS to set up their custom toolbar, they could do so and then let the Toolbar object know it's ready to go. 
 
